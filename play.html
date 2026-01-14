@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trivia Buzzer</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        body { background: #121212; color: white; text-align: center; font-family: sans-serif; padding-top: 50px; }
+        #buzzer-btn { 
+            width: 280px; height: 280px; border-radius: 50%; 
+            background: #e94560; color: white; font-size: 40px; 
+            font-weight: bold; border: 10px solid #533440;
+            box-shadow: 0 15px #9a2d3f; transition: 0.1s;
+        }
+        #buzzer-btn:active { box-shadow: 0 5px #9a2d3f; transform: translateY(10px); }
+        #buzzer-btn:disabled { background: #444; box-shadow: none; opacity: 0.5; border-color: #222; }
+        input { padding: 15px; width: 80%; font-size: 18px; margin-bottom: 30px; border-radius: 5px; border: none; }
+    </style>
+</head>
+<body>
+    <h2>ULTIMATE TRIVIA</h2>
+    <input type="text" id="username" placeholder="Enter Your Name">
+    <br>
+    <button id="buzzer-btn" onclick="sendBuzz()">BUZZ</button>
+
+    <script>
+        const firebaseConfig = {apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+  authDomain: "trivia-game-3fe59.firebaseapp.com",
+  databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+  projectId: "trivia-game-3fe59",
+  storageBucket: "trivia-game-3fe59.firebasestorage.app",
+  messagingSenderId: "851139559118",
+  appId: "1:851139559118:web:df59f13dfd9234c1e89a9f",
+  measurementId: "G-GC3LZ9K9YZ" };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Disable button if someone has already buzzed
+        db.ref('currentBuzz').on('value', (snap) => {
+            document.getElementById('buzzer-btn').disabled = (snap.val() !== null);
+        });
+
+        function sendBuzz() {
+            const name = document.getElementById('username').value;
+            if(!name) return alert("Please enter your name!");
+            
+            db.ref('currentBuzz').transaction((current) => {
+                if (current === null) {
+                    return { user: name, timestamp: Date.now() };
+                }
+                return; 
+            });
+        }
+    </script>
+</body>
+</html>

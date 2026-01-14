@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ultimate Trivia - Host</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --main-blue: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; }
+        body { background: var(--main-blue); color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; padding: 30px; max-width: 1000px; margin: 0 auto; }
+        .cell { background: #16213e; border: 2px solid var(--accent); color: var(--gold); font-size: 2.5em; padding: 40px 0; cursor: pointer; border-radius: 8px; transition: 0.3s; }
+        .cell:hover { background: var(--accent); color: white; }
+        .cell.used { opacity: 0.15; cursor: default; }
+        
+        #buzzer-alert { 
+            background: #e94560; color: white; font-size: 2.5em; padding: 25px; 
+            margin: 20px auto; width: 80%; border-radius: 15px; display: none;
+            box-shadow: 0 0 30px rgba(233, 69, 96, 0.5);
+        }
+        .controls { margin-top: 20px; }
+        button { padding: 12px 25px; font-size: 1em; cursor: pointer; border-radius: 5px; border: none; }
+    </style>
+</head>
+<body>
+    <h1>ULTIMATE TRIVIA</h1>
+    
+    <div id="buzzer-alert">🔔 <span id="winner">PLAYER NAME</span> BUZZED!</div>
+    
+    <div class="controls">
+        <button onclick="resetBuzzer()" style="background: var(--accent); color: white;">RESET BUZZERS</button>
+    </div>
+
+    <div class="grid">
+        <div class="cell" onclick="this.classList.add('used')">$200</div>
+        <div class="cell" onclick="this.classList.add('used')">$200</div>
+        <div class="cell" onclick="this.classList.add('used')">$200</div>
+        <div class="cell" onclick="this.classList.add('used')">$400</div>
+        <div class="cell" onclick="this.classList.add('used')">$400</div>
+        <div class="cell" onclick="this.classList.add('used')">$400</div>
+    </div>
+
+    <script>
+        // REPLACE WITH YOUR ACTUAL CONFIG
+        const firebaseConfig = {  apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+  authDomain: "trivia-game-3fe59.firebaseapp.com",
+  databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+  projectId: "trivia-game-3fe59",
+  storageBucket: "trivia-game-3fe59.firebasestorage.app",
+  messagingSenderId: "851139559118",
+  appId: "1:851139559118:web:df59f13dfd9234c1e89a9f",
+  measurementId: "G-GC3LZ9K9YZ"};
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        db.ref('currentBuzz').on('value', (snap) => {
+            const val = snap.val();
+            const alertBox = document.getElementById('buzzer-alert');
+            if(val) {
+                alertBox.style.display = 'block';
+                document.getElementById('winner').innerText = val.user.toUpperCase();
+            } else {
+                alertBox.style.display = 'none';
+            }
+        });
+
+        function resetBuzzer() {
+            db.ref('currentBuzz').set(null);
+        }
+    </script>
+</body>
+</html>
