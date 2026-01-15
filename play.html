@@ -2,29 +2,30 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Buzzer - Play</title>
+    <title>Buzzer - Quick Join</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { background: #121212; color: white; text-align: center; font-family: sans-serif; padding: 20px; }
-        #setup-area { margin-top: 40px; border: 1px solid #00d2ff; padding: 20px; border-radius: 10px; }
-        input { padding: 15px; width: 85%; border-radius: 8px; border: 1px solid #444; background: #000; color: white; font-size: 18px; margin-bottom: 20px; }
-        #buzzer-btn { width: 260px; height: 260px; border-radius: 50%; background: #e94560; color: white; font-size: 40px; font-weight: bold; border: 10px solid #533440; box-shadow: 0 10px #9a2d3f; margin: 20px auto; display: block; }
-        #buzzer-btn:disabled { background: #333; box-shadow: none; color: #666; }
+        .room-indicator { background: #00d2ff; color: black; padding: 5px; border-radius: 5px; font-weight: bold; margin-bottom: 20px; display: inline-block; }
+        input { padding: 15px; width: 85%; border-radius: 8px; border: 1px solid #444; background: #000; color: white; font-size: 1.2em; margin-bottom: 15px; }
+        .btn { padding: 15px; background: #00d2ff; color: black; border: none; border-radius: 8px; font-weight: bold; width: 90%; font-size: 1.1em; }
+        #buzzer-btn { width: 250px; height: 250px; border-radius: 50%; background: #e94560; color: white; font-size: 40px; font-weight: bold; border: 10px solid #533440; box-shadow: 0 10px #9a2d3f; margin: 20px auto; cursor: pointer; display: block; -webkit-tap-highlight-color: transparent; }
+        #buzzer-btn:disabled { background: #333; box-shadow: none; color: #666; border-color: #222; }
         #q-box { background: #00d2ff; color: black; padding: 15px; border-radius: 10px; margin-bottom: 20px; font-weight: bold; display: none; }
     </style>
 </head>
 <body>
-    <h2>TRIVIA BUZZER</h2>
     <div id="setup-area">
-        <p id="room-welcome">Joining Room: ---</p>
-        <input type="text" id="username" placeholder="Your Name">
-        <button onclick="joinGame()" style="padding:15px 30px; background:#00d2ff; border:none; border-radius:8px; font-weight:bold; width:90%;">JOIN GAME</button>
+        <div class="room-indicator">ROOM: <span id="target-room">...</span></div>
+        <p>Enter your name to join this class:</p>
+        <input type="text" id="username" placeholder="Your Name" autocomplete="off">
+        <button class="btn" onclick="joinGame()">JOIN NOW</button>
     </div>
 
     <div id="game-area" style="display:none;">
         <div id="q-box"></div>
-        <div style="color: #ffd700;"><span id="display-name"></span> | <span id="display-team"></span></div>
+        <div style="color: #ffd700; margin-bottom: 10px;"><span id="display-name"></span> | <span id="display-team"></span></div>
         <button id="buzzer-btn" onclick="sendBuzz()">BUZZ</button>
     </div>
 
@@ -39,26 +40,34 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Get Room from URL
+        // 1. FORCE THE ROOM FROM THE URL
         const urlParams = new URLSearchParams(window.location.search);
-        const ROOM_ID = urlParams.get('room');
-        if(ROOM_ID) document.getElementById('room-welcome').innerText = "Joining Room: " + ROOM_ID;
+        let ROOM_ID = urlParams.get('room');
+
+        if(!ROOM_ID) {
+            ROOM_ID = prompt("Room not found in link. Enter Room Name manually:");
+        }
+        document.getElementById('target-room').innerText = ROOM_ID;
 
         let myName, myTeam, roomRef;
 
         function joinGame() {
             myName = document.getElementById('username').value.trim();
-            if(!ROOM_ID || !myName) return alert("Missing Room or Name!");
+            if(!myName) return alert("Please enter your name!");
             
             roomRef = db.ref('rooms/' + ROOM_ID);
+            
+            // Assign team and switch UI
             roomRef.child('settings/teamCount').once('value').then((snap) => {
                 const count = snap.val() || 3;
                 myTeam = "Team " + (Math.floor(Math.random() * count) + 1);
+                
                 document.getElementById('setup-area').style.display = 'none';
                 document.getElementById('game-area').style.display = 'block';
                 document.getElementById('display-name').innerText = myName;
                 document.getElementById('display-team').innerText = myTeam;
 
+                // Set Listeners for THIS room
                 roomRef.child('currentQuestion').on('value', (s) => {
                     const q = s.val();
                     document.getElementById('q-box').innerText = q || "";
@@ -73,7 +82,7 @@
         function sendBuzz() {
             roomRef.child('currentBuzz').transaction((curr) => {
                 if (curr === null) return { user: myName, team: myTeam, ts: Date.now() };
-                return;
+                return; 
             });
         }
     </script>
