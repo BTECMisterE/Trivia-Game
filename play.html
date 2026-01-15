@@ -6,35 +6,54 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #121212; color: white; text-align: center; font-family: sans-serif; padding-top: 30px; }
+        body { background: #121212; color: white; text-align: center; font-family: sans-serif; padding-top: 30px; margin: 0; }
+        .container { padding: 20px; }
+        
+        /* Join Screen */
+        #setup-area { background: #1a1a2e; padding: 30px; border-radius: 15px; margin: 10px; border: 2px solid #00d2ff; }
+        input { padding: 15px; width: 85%; border-radius: 8px; border: 1px solid #444; background: #000; color: white; font-size: 18px; margin-bottom: 20px; outline: none; }
+        input:focus { border-color: #00d2ff; }
+        .join-btn { padding: 15px 40px; background: #00d2ff; color: black; border: none; border-radius: 8px; font-weight: bold; font-size: 18px; width: 100%; cursor: pointer; }
+
+        /* Game Screen */
+        #game-area { display: none; }
         #buzzer-btn { 
-            width: 250px; height: 250px; border-radius: 50%; 
-            background: #e94560; color: white; font-size: 40px; 
-            font-weight: bold; border: 10px solid #533440;
-            box-shadow: 0 10px #9a2d3f; margin-top: 20px;
+            width: 280px; height: 280px; border-radius: 50%; 
+            background: #e94560; color: white; font-size: 45px; 
+            font-weight: bold; border: 12px solid #533440;
+            box-shadow: 0 12px #9a2d3f; margin: 40px auto; 
+            cursor: pointer; -webkit-tap-highlight-color: transparent;
         }
-        #buzzer-btn:active { box-shadow: 0 2px #9a2d3f; transform: translateY(8px); }
-        #buzzer-btn:disabled { background: #444; opacity: 0.5; box-shadow: none; }
-        .info { margin-bottom: 10px; font-size: 1.2em; color: #00d2ff; }
-        input { padding: 12px; width: 80%; border-radius: 5px; border: none; margin-bottom: 20px; font-size: 16px; }
-        button.join { padding: 15px 30px; background: #00d2ff; border: none; border-radius: 5px; font-weight: bold; }
+        #buzzer-btn:active { box-shadow: 0 4px #9a2d3f; transform: translateY(8px); }
+        #buzzer-btn:disabled { background: #333; border-color: #222; box-shadow: none; color: #666; cursor: not-allowed; }
+        
+        .info-box { background: rgba(255,255,255,0.05); padding: 15px; margin: 10px; border-radius: 10px; border: 1px solid #333; }
+        .team-tag { color: #ffd700; font-weight: bold; font-size: 1.4em; }
     </style>
 </head>
 <body>
-    <h2>ULTIMATE TRIVIA</h2>
-    
-    <div id="setup-area">
-        <input type="text" id="username" placeholder="Enter Your Name">
-        <button class="join" onclick="joinGame()">JOIN GAME</button>
-    </div>
 
-    <div id="game-area" style="display:none;">
-        <div class="info"><span id="display-name"></span></div>
-        <div class="info" style="color:gold; font-weight: bold;">YOUR TEAM: <span id="display-team"></span></div>
-        <button id="buzzer-btn" onclick="sendBuzz()">BUZZ</button>
+    <div class="container">
+        <h2>ULTIMATE TRIVIA</h2>
+        
+        <div id="setup-area">
+            <p>Enter your name to join:</p>
+            <input type="text" id="username" placeholder="Your Name" autocomplete="off">
+            <button class="join-btn" onclick="joinGame()">JOIN GAME</button>
+        </div>
+
+        <div id="game-area">
+            <div class="info-box">
+                <div>Player: <strong id="display-name"></strong></div>
+                <div class="team-tag" id="display-team"></div>
+            </div>
+            <button id="buzzer-btn" onclick="sendBuzz()">BUZZ</button>
+            <p id="status-text" style="color: #888;">Ready to play!</p>
+        </div>
     </div>
 
     <script>
+        // YOUR FIREBASE CONFIG
         const firebaseConfig = {
             apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
             authDomain: "trivia-game-3fe59.firebaseapp.com",
@@ -42,8 +61,7 @@
             projectId: "trivia-game-3fe59",
             storageBucket: "trivia-game-3fe59.firebasestorage.app",
             messagingSenderId: "851139559118",
-            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f",
-            measurementId: "G-GC3LZ9K9YZ"
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
@@ -51,14 +69,21 @@
         let myTeam = "";
 
         function joinGame() {
-            const name = document.getElementById('username').value.trim();
-            if(!name) return alert("Please enter your name!");
+            const nameInput = document.getElementById('username');
+            const name = nameInput.value.trim();
+            
+            if(!name) {
+                alert("Please enter a name first!");
+                return;
+            }
 
+            // Get team count from teacher
             db.ref('settings/teamCount').once('value').then((snap) => {
                 const count = snap.val() || 3;
                 const randomNum = Math.floor(Math.random() * count) + 1;
                 myTeam = "Team " + randomNum;
 
+                // UI Transition
                 document.getElementById('setup-area').style.display = 'none';
                 document.getElementById('game-area').style.display = 'block';
                 document.getElementById('display-name').innerText = name;
@@ -68,17 +93,35 @@
 
         function sendBuzz() {
             const name = document.getElementById('display-name').innerText;
+            const btn = document.getElementById('buzzer-btn');
+            
             db.ref('currentBuzz').transaction((curr) => {
-                if (curr === null) return { user: name, team: myTeam, ts: Date.now() };
-                return;
+                if (curr === null) {
+                    return { user: name, team: myTeam, ts: Date.now() };
+                }
+                return; // Already buzzed
             });
         }
 
+        // Only the Buzz Button gets disabled, NOT the text input
         db.ref('currentBuzz').on('value', (snap) => {
-            document.getElementById('buzzer-btn').disabled = (snap.val() !== null);
+            const buzzerBusy = (snap.val() !== null);
+            const btn = document.getElementById('buzzer-btn');
+            const status = document.getElementById('status-text');
+            
+            if(btn) {
+                btn.disabled = buzzerBusy;
+                status.innerText = buzzerBusy ? "Buzzer Locked..." : "Go!";
+                status.style.color = buzzerBusy ? "#e94560" : "#00d2ff";
+            }
         });
 
-        db.ref('settings/sessionID').on('value', () => { location.reload(); });
+        // Refresh page if teacher resets everything
+        db.ref('settings/sessionID').on('value', () => { 
+            if(document.getElementById('game-area').style.display === 'block') {
+                location.reload(); 
+            }
+        });
     </script>
 </body>
 </html>
