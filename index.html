@@ -1,76 +1,48 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Unified Board</title>
+    <title>Trivia Master - Debug Version</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        :root { --bg: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; }
-        body { background: var(--bg); color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
-        
-        /* Top Control Bar */
-        .controls { background: #111; padding: 20px; border-radius: 10px; border: 2px solid var(--accent); margin-bottom: 20px; display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; align-items: center; }
-        .room-box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; }
-        
-        /* Game Grid */
+        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        .box { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; margin-bottom: 20px; }
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-bottom: 40px; }
-        .cat-h { font-weight: bold; color: var(--accent); border-bottom: 2px solid var(--accent); padding: 10px; text-transform: uppercase; font-size: 0.9em; }
-        .cell { background: #16213e; border: 1px solid #333; color: var(--gold); font-size: 1.8em; padding: 20px 0; cursor: pointer; border-radius: 8px; }
-        .cell.used { opacity: 0.1; cursor: default; }
-
-        /* Theater Overlay */
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--bg); z-index:2000; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; }
-        #q-text { font-size: 3em; padding: 40px; }
-        #a-text { font-size: 2em; color: var(--gold); display: none; margin-top: 20px; }
-
-        /* Editor Section */
-        #editor-section { background: #111; padding: 20px; border-radius: 10px; text-align: left; }
-        .editor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
-        .cat-col { background: #222; padding: 10px; border-radius: 5px; }
-        input { width: 90%; margin-bottom: 5px; background: #000; color: #fff; border: 1px solid #444; padding: 5px; font-size: 11px; }
-        button { cursor: pointer; padding: 10px; font-weight: bold; border-radius: 5px; border: none; }
-        
-        #buzzer-alert { background: #e94560; padding: 20px; position: fixed; top: 20px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 3000; border: 3px solid white; }
+        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 15px 0; cursor: pointer; }
+        .editor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; text-align: left; }
+        input { width: 90%; margin-bottom: 5px; background: #000; color: #fff; border: 1px solid #444; padding: 5px; font-size: 10px; }
+        button { cursor: pointer; padding: 10px; font-weight: bold; border: none; background: #00d2ff; color: #000; border-radius: 5px; }
+        #debug-log { background: #000; color: #0f0; padding: 10px; text-align: left; font-family: monospace; height: 100px; overflow-y: scroll; border: 1px solid #333; margin-top: 20px; }
     </style>
 </head>
 <body>
 
-    <div id="buzzer-alert">🔔 <span id="winner">---</span> <button onclick="resetBuzzer()" style="margin-left:20px; background:white;">RESET</button></div>
-
-    <div class="controls">
-        <div class="room-box">
-            <strong>ROOM NAME:</strong> 
-            <input type="text" id="room-input" value="Class1" style="width:120px; font-size:16px; margin:0 10px;">
-            <button onclick="connectRoom()" style="background:var(--accent); color:black;">CONNECT & SHOW QR</button>
-        </div>
-        <div id="qrcode-container" style="background:white; padding:5px; border-radius:5px; display:none;">
-            <div id="qrcode"></div>
-        </div>
+    <div class="box">
+        <strong>ROOM NAME:</strong> 
+        <input type="text" id="room-input" value="Class1" style="width:150px; font-size:16px;">
+        <button onclick="connectRoom()">1. CONNECT ROOM</button>
+        <p id="room-status" style="color: #0f0;"></p>
     </div>
 
     <div id="main-grid" class="grid"></div>
 
-    <div id="editor-section">
-        <h3 style="color:var(--accent); margin-top:0;">BOARD EDITOR</h3>
-        <div style="margin-bottom:15px;">
-            <button onclick="document.getElementById('file-in').click()" style="background:#6f42c1; color:white;">📁 LOAD .JSON</button>
-            <button onclick="exportJSON()" style="background:#444; color:white;">💾 SAVE .JSON</button>
-            <input type="file" id="file-in" style="display:none" onchange="importJSON(event)">
-        </div>
-        
+    <div class="box">
+        <h3>2. BOARD EDITOR</h3>
+        <button onclick="document.getElementById('file-in').click()" style="background:#6f42c1; color:white;">📁 LOAD .JSON</button>
+        <input type="file" id="file-in" style="display:none" onchange="importJSON(event)">
         <div id="editor-container" class="editor-grid"></div>
-        
-        <button onclick="buildBoard()" style="background:green; color:white; width:100%; padding:20px; margin-top:20px; font-size:1.5em; border-radius: 10px;">BUILD / REFRESH BOARD</button>
+        <button onclick="buildBoard()" style="background: #28a745; color: white; width: 100%; margin-top: 20px; padding: 15px;">3. BUILD BOARD</button>
     </div>
 
-    <div id="theater" onclick="showAns()">
-        <div id="q-text">QUESTION</div>
-        <div id="a-text">ANSWER</div>
-        <button onclick="closeTheater(event)" style="margin-top:40px; background:#444; color:white; padding: 10px 20px;">BACK TO BOARD</button>
-    </div>
+    <div id="debug-log">Log: System Ready...</div>
 
     <script>
+        function log(msg) {
+            const l = document.getElementById('debug-log');
+            l.innerHTML += "<br>> " + msg;
+            l.scrollTop = l.scrollHeight;
+        }
+
         const firebaseConfig = {
             apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
             authDomain: "trivia-game-3fe59.firebaseapp.com",
@@ -78,111 +50,21 @@
             projectId: "trivia-game-3fe59",
             appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
         };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            var db = firebase.database();
+            log("Firebase Initialized.");
+        } catch(e) {
+            log("Firebase Error: " + e.message);
+        }
 
         let rRef = null;
 
         function connectRoom() {
-            const roomName = document.getElementById('room-input').value.replace(/[^a-zA-Z0-9]/g, "");
-            if(!roomName) return alert("Enter a room name!");
-            
-            rRef = db.ref('rooms/' + roomName);
-            
-            // Show QR
-            const pUrl = window.location.href.replace('index.html', 'play.html') + "?room=" + roomName;
-            document.getElementById('qrcode-container').style.display = 'block';
-            document.getElementById('qrcode').innerHTML = "";
-            new QRCode(document.getElementById("qrcode"), { text: pUrl, width: 90, height: 90 });
-
-            // Listen for buzzers in this room
-            rRef.child('currentBuzz').on('value', s => {
-                const v = s.val();
-                document.getElementById('buzzer-alert').style.display = v ? 'block' : 'none';
-                if(v) document.getElementById('winner').innerText = v.user.toUpperCase() + " (" + (v.team || "") + ")";
-            });
-            
-            alert("Connected to Room: " + roomName);
-        }
-
-        function resetBuzzer() { if(rRef) rRef.child('currentBuzz').set(null); }
-
-        // Theater Logic
-        let tStep = 0;
-        function openTheater(q, a, cell) {
-            tStep = 1;
-            document.getElementById('q-text').innerText = q;
-            document.getElementById('a-text').innerText = a;
-            document.getElementById('a-text').style.display = 'none';
-            document.getElementById('theater').style.display = 'flex';
-            cell.classList.add('used');
-            if(rRef) rRef.child('currentQuestion').set(q);
-        }
-        function showAns() { if(tStep===1) { document.getElementById('a-text').style.display='block'; tStep=2; } }
-        function closeTheater(e) { e.stopPropagation(); document.getElementById('theater').style.display='none'; if(rRef) rRef.child('currentQuestion').set(null); }
-
-        // Build Editor Columns
-        const area = document.getElementById('editor-container');
-        for(let c=1; c<=6; c++) {
-            let d = document.createElement('div');
-            d.className = "cat-col";
-            d.innerHTML = `<input type="text" placeholder="Category ${c}" id="cat-n-${c}" style="background:var(--accent); color:black; font-weight:bold;">`;
-            [200,400,600,800,1000].forEach(v => {
-                d.innerHTML += `<input type="text" placeholder="Q $${v}" class="qi" data-c="${c}" data-v="${v}">`;
-                d.innerHTML += `<input type="text" placeholder="A $${v}" class="ai" data-c="${c}" data-v="${v}">`;
-            });
-            area.appendChild(d);
-        }
-
-        function buildBoard() {
-            const grid = document.getElementById('main-grid');
-            grid.innerHTML = "";
-            for(let c=1; c<=6; c++) {
-                let h = document.createElement('div'); h.className='cat-h';
-                h.innerText = document.getElementById('cat-n-'+c).value || "CAT "+c;
-                grid.appendChild(h);
-            }
-            [200,400,600,800,1000].forEach(val => {
-                for(let c=1; c<=6; c++) {
-                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${val}"]`).value;
-                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${val}"]`).value;
-                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText = "$"+val;
-                    cell.onclick = () => { if(q) openTheater(q, a, cell); };
-                    grid.appendChild(cell);
-                }
-            });
-            if(rRef) rRef.child('settings/teamCount').set(3);
-        }
-
-        function importJSON(e) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const data = JSON.parse(ev.target.result);
-                data.categories.forEach((cat, i) => {
-                    const cId = i + 1;
-                    document.getElementById(`cat-n-${cId}`).value = cat.name;
-                    cat.items.forEach((item, j) => {
-                        const vList = [200,400,600,800,1000];
-                        document.querySelector(`.qi[data-c="${cId}"][data-v="${vList[j]}"]`).value = item.q;
-                        document.querySelector(`.ai[data-c="${cId}"][data-v="${vList[j]}"]`).value = item.a;
-                    });
-                });
-            };
-            reader.readAsText(e.target.files[0]);
-        }
-
-        function exportJSON() {
-            let data = { categories: [] };
-            for(let c=1; c<=6; c++) {
-                let cat = { name: document.getElementById('cat-n-'+c).value, items: [] };
-                [200,400,600,800,1000].forEach(v => {
-                    cat.items.push({ q: document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value, a: document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value });
-                });
-                data.categories.push(cat);
-            }
-            const blob = new Blob([JSON.stringify(data)], {type:"application/json"});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "lesson.json"; a.click();
-        }
-    </script>
-</body>
-</html>
+            log("Connect button clicked...");
+            try {
+                const roomName = document.getElementById('room-input').value.trim();
+                if(!roomName) { log("Error: No room name"); return; }
+                
+                rRef = db
