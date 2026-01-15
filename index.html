@@ -1,62 +1,185 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Final Repair</title>
+    <title>Trivia Master - Final Stable</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        :root { --main: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; }
-        body { background: var(--main); color: white; font-family: sans-serif; text-align: center; margin: 0; padding-bottom: 50px; }
+        :root { --bg: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; }
+        body { background: var(--bg); color: white; font-family: sans-serif; text-align: center; margin: 0; padding-bottom: 50px; }
         
-        /* Layout */
-        .room-panel { position: fixed; top: 10px; right: 10px; background: white; padding: 10px; border-radius: 10px; color: black; z-index: 1000; }
-        .grid { display: grid; gap: 10px; padding: 20px; margin-top: 80px; }
-        .category-header { font-weight: bold; color: var(--accent); border-bottom: 2px solid var(--accent); padding: 5px; }
-        .cell { background: #16213e; border: 1px solid #333; color: var(--gold); font-size: 2em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
-        .cell.used { opacity: 0.2; }
-        
-        /* Overlays */
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--main); z-index:2000; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; }
-        #theater-text { font-size: 3em; padding: 20px; }
-        #theater-ans { font-size: 2em; color: var(--gold); display: none; margin-top: 20px; }
+        /* Grid & UI */
+        .grid { display: grid; gap: 10px; padding: 20px; margin-top: 20px; grid-template-columns: repeat(6, 1fr); }
+        .cat-h { font-weight: bold; color: var(--accent); border-bottom: 2px solid var(--accent); padding: 5px; text-transform: uppercase; }
+        .cell { background: #16213e; border: 1px solid #333; color: var(--gold); font-size: 1.8em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
+        .cell.used { opacity: 0.1; cursor: default; }
 
-        /* Setup Area */
-        #setup { background: #111; padding: 30px; border-top: 4px solid var(--accent); text-align: left; margin-top: 50px; }
-        .setup-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
-        .cat-box { background: #222; padding: 10px; border-radius: 5px; border: 1px solid #444; }
-        input { width: 90%; margin-bottom: 5px; background: #000; color: white; border: 1px solid #555; padding: 4px; }
-        button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 4px; }
-        
-        #buzzer-alert { background: #e94560; padding: 20px; position: fixed; top: 20px; left: 10%; width: 50%; border-radius: 10px; display: none; z-index: 3000; border: 3px solid white; }
+        /* Theater Overlay */
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--bg); z-index:2000; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; }
+        #q-text { font-size: 3em; padding: 40px; }
+        #a-text { font-size: 2.2em; color: var(--gold); display: none; margin-top: 20px; border-top: 1px solid #333; padding-top: 20px; }
+
+        /* Setup Section */
+        #setup { background: #111; padding: 30px; border-top: 4px solid var(--accent); margin-top: 50px; text-align: left; }
+        .editor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .cat-col { background: #222; padding: 10px; border-radius: 5px; }
+        input { width: 90%; margin-bottom: 4px; background: #000; color: #fff; border: 1px solid #444; padding: 5px; font-size: 12px; }
+        button { cursor: pointer; padding: 10px; font-weight: bold; border-radius: 4px; border: none; }
+
+        #buzzer-alert { background: #e94560; padding: 20px; position: fixed; top: 20px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 3000; border: 3px solid white; font-size: 1.5em; }
+        .room-tag { background: white; color: black; padding: 10px; border-radius: 5px; position: absolute; top: 10px; right: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="room-panel">
-        <div id="room-display" style="font-weight:bold">ROOM: ---</div>
-        <div id="qrcode"></div>
+    <div id="buzzer-alert">🔔 <span id="winner">---</span> <button onclick="resetBuzzer()" style="margin-left:20px;">RESET</button></div>
+    
+    <div class="room-tag">
+        <div id="room-name-display" style="font-weight:bold">ROOM: ---</div>
+        <div id="qrcode" style="margin-top:5px"></div>
     </div>
 
-    <div id="buzzer-alert">🔔 <span id="winner">---</span> <button onclick="resetBuzzer()">RESET</button></div>
-    <div id="scoreboard" style="display:flex; justify-content:center; gap:15px; padding:20px;"></div>
+    <h1>TRIVIA BOARD</h1>
     <div id="main-grid" class="grid"></div>
 
-    <div id="theater" onclick="revealAnswer()">
-        <div id="theater-text">CLUE</div>
-        <div id="theater-ans">ANSWER</div>
-        <button onclick="closeTheater(event)" style="margin-top:50px; background:#444; color:white;">BACK TO BOARD</button>
+    <div id="theater" onclick="showAns()">
+        <div id="q-text">QUESTION</div>
+        <div id="a-text">ANSWER</div>
+        <button onclick="closeTheater(event)" style="margin-top:40px; background:#444; color:white;">CLOSE</button>
     </div>
 
     <div id="setup">
-        <h2>1. Configure Room</h2>
-        <button onclick="exportData()" style="background:#6f42c1; color:white;">💾 SAVE LESSON</button>
-        <button onclick="triggerFileSelect()" style="background:#6f42c1; color:white;">📁 LOAD LESSON</button>
-        <input type="file" id="file-input" style="display:none" onchange="importData(event)">
+        <h2>Board Editor</h2>
+        <button onclick="document.getElementById('file-in').click()" style="background:#6f42c1; color:white;">📁 LOAD .JSON FILE</button>
+        <button onclick="exportJSON()" style="background:#444; color:white;">💾 SAVE TO FILE</button>
+        <input type="file" id="file-in" style="display:none" onchange="importJSON(event)">
         
-        <div id="editor-fields" class="setup-row" style="margin-top:20px;"></div>
-        <button onclick="applyChanges()" style="background:green; color:white; width:100%; padding:20px; margin-top:20px; font-size:1.5em;">2. BUILD GAME</button>
+        <div id="editor-container" class="editor-grid" style="margin-top:20px;"></div>
+        <button onclick="buildBoard()" style="background:green; color:white; width:100%; padding:20px; margin-top:20px; font-size:1.5em;">UPDATE GAME BOARD</button>
     </div>
 
     <script>
-        const firebaseConfig =
+        const firebaseConfig = {
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let ROOM = prompt("Room Name?", "Class1").replace(/[^a-zA-Z0-9]/g, "");
+        document.getElementById('room-name-display').innerText = "ROOM: " + ROOM;
+        const rRef = db.ref('rooms/' + ROOM);
+
+        // QR Setup
+        const pUrl = window.location.href.replace('index.html', 'play.html') + "?room=" + ROOM;
+        new QRCode(document.getElementById("qrcode"), { text: pUrl, width: 80, height: 80 });
+
+        // Buzzer Listener
+        rRef.child('currentBuzz').on('value', s => {
+            const v = s.val();
+            document.getElementById('buzzer-alert').style.display = v ? 'block' : 'none';
+            if(v) document.getElementById('winner').innerText = v.user.toUpperCase() + " (" + (v.team || "") + ")";
+        });
+        function resetBuzzer() { rRef.child('currentBuzz').set(null); }
+
+        // Theater Logic
+        let tStep = 0;
+        function openTheater(q, a, cell) {
+            tStep = 1;
+            document.getElementById('q-text').innerText = q;
+            document.getElementById('a-text').innerText = a;
+            document.getElementById('a-text').style.display = 'none';
+            document.getElementById('theater').style.display = 'flex';
+            cell.classList.add('used');
+            rRef.child('currentQuestion').set(q);
+        }
+        function showAns() { if(tStep===1) { document.getElementById('a-text').style.display='block'; tStep=2; } }
+        function closeTheater(e) { e.stopPropagation(); document.getElementById('theater').style.display='none'; rRef.child('currentQuestion').set(null); }
+
+        // Editor Builder
+        function createEditor() {
+            const area = document.getElementById('editor-container');
+            area.innerHTML = "";
+            for(let c=1; c<=6; c++) {
+                let d = document.createElement('div');
+                d.className = "cat-col";
+                d.innerHTML = `<input type="text" placeholder="Category ${c}" id="cat-n-${c}" style="background:var(--accent); color:black; font-weight:bold;">`;
+                [200,400,600,800,1000].forEach(v => {
+                    d.innerHTML += `<input type="text" placeholder="Q $${v}" class="qi" data-c="${c}" data-v="${v}">`;
+                    d.innerHTML += `<input type="text" placeholder="A $${v}" class="ai" data-c="${c}" data-v="${v}">`;
+                });
+                area.appendChild(d);
+            }
+        }
+
+        function buildBoard() {
+            const grid = document.getElementById('main-grid');
+            grid.innerHTML = "";
+            // Headers
+            for(let c=1; c<=6; c++) {
+                let h = document.createElement('div'); h.className='cat-h';
+                h.innerText = document.getElementById('cat-n-'+c).value || "CAT "+c;
+                grid.appendChild(h);
+            }
+            // Cells
+            [200,400,600,800,1000].forEach(val => {
+                for(let c=1; c<=6; c++) {
+                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${val}"]`).value;
+                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${val}"]`).value;
+                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText = "$"+val;
+                    cell.onclick = () => { if(q) openTheater(q, a, cell); };
+                    grid.appendChild(cell);
+                }
+            });
+            window.scrollTo(0,0);
+        }
+
+        function importJSON(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    data.categories.forEach((cat, i) => {
+                        const cId = i + 1;
+                        if(document.getElementById(`cat-n-${cId}`)) {
+                            document.getElementById(`cat-n-${cId}`).value = cat.name;
+                            cat.items.forEach((item, j) => {
+                                const vals = [200,400,600,800,1000];
+                                const qF = document.querySelector(`.qi[data-c="${cId}"][data-v="${vals[j]}"]`);
+                                const aF = document.querySelector(`.ai[data-c="${cId}"][data-v="${vals[j]}"]`);
+                                if(qF) qF.value = item.q;
+                                if(aF) aF.value = item.a;
+                            });
+                        }
+                    });
+                    alert("Loaded! Now click UPDATE GAME BOARD.");
+                } catch(err) { alert("Format Error: " + err); }
+            };
+            reader.readAsText(file);
+        }
+
+        function exportJSON() {
+            let data = { categories: [] };
+            for(let c=1; c<=6; c++) {
+                let cat = { name: document.getElementById('cat-n-'+c).value, items: [] };
+                [200,400,600,800,1000].forEach(v => {
+                    cat.items.push({
+                        q: document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value,
+                        a: document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value
+                    });
+                });
+                data.categories.push(cat);
+            }
+            const blob = new Blob([JSON.stringify(data)], {type:"application/json"});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "trivia.json"; a.click();
+        }
+
+        window.onload = createEditor;
+    </script>
+</body>
+</html>
