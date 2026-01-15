@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trivia Rescue Mode</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --accent: #00d2ff; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; }
+        #modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:999; overflow-y:auto; padding:20px; }
+        .editor-box { background: #16213e; border: 2px solid var(--accent); padding: 20px; max-width: 900px; margin: auto; border-radius: 10px; }
+        .cat-col { background: rgba(255,255,255,0.1); padding: 10px; margin: 5px; display: inline-block; vertical-align: top; width: 250px; border-radius: 5px; }
+        input { width: 90%; margin: 3px 0; padding: 5px; display: block; margin-left: auto; margin-right: auto; }
+        .cat-header { background: var(--accent); color: black; font-weight: bold; border: none; }
+        .grid { display: grid; gap: 10px; padding: 20px; }
+        .cell { background: #16213e; border: 1px solid #444; padding: 30px; color: gold; font-size: 2em; cursor: pointer; }
+        #admin-bar { position: fixed; bottom: 0; width: 100%; background: #000; padding: 15px; }
+    </style>
+</head>
+<body>
+
+    <h1>TRIVIA BOARD</h1>
+    <div id="main-grid" class="grid"></div>
+
+    <div id="admin-bar">
+        <button onclick="openEditor()" style="padding:10px 20px; font-size: 1.2em;">📝 OPEN EDITOR</button>
+        <button onclick="resetBuzzer()" style="background: red; color: white; padding: 10px;">RESET BUZZER</button>
+    </div>
+
+    <div id="modal">
+        <div class="editor-box">
+            <h2>Editor</h2>
+            <div id="editor-content"></div>
+            <hr>
+            <button onclick="apply()" style="background: green; color: white; width: 100%; padding: 15px; font-size: 1.2em; cursor: pointer;">APPLY TO BOARD</button>
+            <button onclick="document.getElementById('modal').style.display='none'" style="margin-top: 10px;">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // FIREBASE CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            storageBucket: "trivia-game-3fe59.firebasestorage.app",
+            messagingSenderId: "851139559118",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        function openEditor() {
+            const container = document.getElementById('editor-content');
+            container.innerHTML = ""; // Clear
+            
+            // We'll create 3 categories manually to ensure it works
+            for(let i=1; i<=3; i++) {
+                let div = document.createElement('div');
+                div.className = "cat-col";
+                div.innerHTML = `
+                    <input type="text" placeholder="Category Name" class="c-name" id="cn-${i}">
+                    <hr>
+                    <input type="text" placeholder="Q1" class="q-val" data-c="${i}">
+                    <input type="text" placeholder="A1" class="a-val" data-c="${i}">
+                    <br>
+                    <input type="text" placeholder="Q2" class="q-val" data-c="${i}">
+                    <input type="text" placeholder="A2" class="a-val" data-c="${i}">
+                `;
+                container.appendChild(div);
+            }
+            document.getElementById('modal').style.display = 'block';
+        }
+
+        function apply() {
+            const grid = document.getElementById('main-grid');
+            grid.innerHTML = "";
+            grid.style.gridTemplateColumns = "repeat(3, 1fr)";
+
+            // Build Headers
+            for(let i=1; i<=3; i++) {
+                let h = document.createElement('div');
+                h.innerText = document.getElementById('cn-'+i).value || "Category " + i;
+                h.style.fontWeight = "bold";
+                grid.appendChild(h);
+            }
+
+            // Simple demo for 2 rows
+            for(let row=0; row<2; row++) {
+                for(let col=1; col<=3; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.innerText = "$"+((row+1)*200);
+                    
+                    // Get data from the inputs we just filled
+                    const qFields = document.querySelectorAll(`.q-val[data-c="${col}"]`);
+                    const aFields = document.querySelectorAll(`.a-val[data-c="${col}"]`);
+                    
+                    cell.onclick = function() {
+                        alert("Q: " + qFields[row].value + "\n\nA: " + aFields[row].value);
+                        this.style.opacity = "0.2";
+                    }
+                    grid.appendChild(cell);
+                }
+            }
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        function resetBuzzer() { db.ref('currentBuzz').set(null); }
+    </script>
+</body>
+</html>
