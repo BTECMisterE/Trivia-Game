@@ -1,14 +1,101 @@
-// --- QR Setup with Force-Link ---
-// This ensures the student is sent to play.html with the ?room= parameter attached
-const currentURL = window.location.href;
-const baseURL = currentURL.substring(0, currentURL.lastIndexOf('/') + 1);
-const pUrl = baseURL + "play.html?room=" + ROOM;
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trivia Master - 2026 Stable</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root { --bg: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; }
+        body { background: var(--bg); color: white; font-family: sans-serif; text-align: center; margin: 0; padding-bottom: 50px; }
+        
+        /* Game Grid */
+        .grid { display: grid; gap: 10px; padding: 20px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
+        .cat-h { font-weight: bold; color: var(--accent); border-bottom: 2px solid var(--accent); padding: 10px; text-transform: uppercase; }
+        .cell { background: #16213e; border: 1px solid #333; color: var(--gold); font-size: 2em; padding: 25px 0; cursor: pointer; border-radius: 8px; }
+        .cell.used { opacity: 0.1; cursor: default; }
 
-// Clear any old QR code before making a new one
-document.getElementById("qrcode").innerHTML = ""; 
-new QRCode(document.getElementById("qrcode"), { 
-    text: pUrl, 
-    width: 100, 
-    height: 100,
-    correctLevel : QRCode.CorrectLevel.H
-});
+        /* Theater Overlay */
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--bg); z-index:2000; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; }
+        #q-text { font-size: 3.5em; padding: 40px; font-weight: bold; }
+        #a-text { font-size: 2.5em; color: var(--gold); display: none; margin-top: 20px; border-top: 2px solid #444; padding-top: 20px; }
+
+        /* Setup Section */
+        #setup { background: #111; padding: 30px; border-top: 4px solid var(--accent); margin-top: 50px; text-align: left; }
+        .editor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .cat-col { background: #222; padding: 10px; border-radius: 5px; border: 1px solid #333; }
+        input { width: 90%; margin-bottom: 5px; background: #000; color: #fff; border: 1px solid #444; padding: 6px; }
+        button { cursor: pointer; padding: 12px; font-weight: bold; border-radius: 5px; border: none; }
+
+        /* Floating UI */
+        #buzzer-alert { background: #e94560; padding: 20px; position: fixed; top: 20px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 3000; border: 3px solid white; font-size: 1.5em; }
+        .room-card { background: white; color: black; padding: 15px; border-radius: 10px; position: absolute; top: 10px; right: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body>
+
+    <div id="buzzer-alert">🔔 <span id="winner">---</span> <button onclick="resetBuzzer()" style="margin-left:20px; background:white;">RESET</button></div>
+    
+    <div class="room-card">
+        <div id="room-name-display" style="font-weight:bold; font-size: 1.2em;">ROOM: ---</div>
+        <div id="qrcode" style="margin-top:10px"></div>
+    </div>
+
+    <div id="main-grid" class="grid"></div>
+
+    <div id="theater" onclick="showAns()">
+        <div id="q-text">QUESTION</div>
+        <div id="a-text">ANSWER</div>
+        <button onclick="closeTheater(event)" style="margin-top:40px; background:#444; color:white; padding: 15px 30px;">CLOSE & BACK</button>
+    </div>
+
+    <div id="setup">
+        <h2 style="color:var(--accent)">1. Load or Create Lesson</h2>
+        <button onclick="document.getElementById('file-in').click()" style="background:#6f42c1; color:white;">📁 LOAD .JSON FILE</button>
+        <button onclick="exportJSON()" style="background:#444; color:white;">💾 SAVE CURRENT AS FILE</button>
+        <input type="file" id="file-in" style="display:none" onchange="importJSON(event)">
+        
+        <div id="editor-container" class="editor-grid" style="margin-top:20px;"></div>
+        <button onclick="buildBoard()" style="background:green; color:white; width:100%; padding:20px; margin-top:20px; font-size:1.5em; border-radius: 10px;">2. UPDATE GAME BOARD</button>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let ROOM = prompt("Enter Room Name:", "Class1").replace(/[^a-zA-Z0-9]/g, "");
+        document.getElementById('room-name-display').innerText = "ROOM: " + ROOM;
+        const rRef = db.ref('rooms/' + ROOM);
+
+        // QR Setup
+        const pUrl = window.location.href.replace('index.html', 'play.html') + "?room=" + ROOM;
+        new QRCode(document.getElementById("qrcode"), { text: pUrl, width: 120, height: 120 });
+
+        // Buzzer
+        rRef.child('currentBuzz').on('value', s => {
+            const v = s.val();
+            document.getElementById('buzzer-alert').style.display = v ? 'block' : 'none';
+            if(v) document.getElementById('winner').innerText = v.user.toUpperCase() + " (" + (v.team || "") + ")";
+        });
+        function resetBuzzer() { rRef.child('currentBuzz').set(null); }
+
+        // Theater Logic
+        let tStep = 0;
+        function openTheater(q, a, cell) {
+            tStep = 1;
+            document.getElementById('q-text').innerText = q;
+            document.getElementById('a-text').innerText = a;
+            document.getElementById('a-text').style.display = 'none';
+            document.getElementById('theater').style.display = 'flex';
+            cell.classList.add('used');
+            rRef.child('currentQuestion').set(q);
+        }
+        function showAns() { if(tStep===1) { document.getElementById('a-text').style.display='block'; tStep=2; } }
+        function closeTheater(e) { e.stopPropagation
