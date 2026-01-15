@@ -89,4 +89,153 @@
             if(val && val.user) {
                 document.getElementById('buzzer-alert').style.display = 'block';
                 document.getElementById('winner').innerText = val.user.toUpperCase() + " (" + (val.team || "No Team") + ")";
-            } else { document.getElementById('buz
+            } else { document.getElementById('buzzer-alert').style.display = 'none'; }
+        });
+
+        function resetBuzzer() { db.ref('currentBuzz').set(null); }
+
+        // 2. TEAM LOGIC
+        function initTeams() {
+            const count = document.getElementById('team-count').value;
+            db.ref('settings/teamCount').set(parseInt(count));
+            const container = document.getElementById('scoreboard-container');
+            container.innerHTML = "";
+            for(let i=1; i<=count; i++) {
+                const teamId = 't'+i;
+                const card = document.createElement('div');
+                card.className = 'team-card';
+                card.id = 'card-'+teamId;
+                card.innerHTML = `<input type="text" value="Team ${i}" class="team-name-save" style="background:transparent; border:none; color:white; text-align:center; width:100%; border-bottom:1px solid #444; margin-bottom:5px; font-weight:bold;">
+                    <div class="score-display" id="${teamId}">0</div>
+                    <button onclick="adj('${teamId}', -100)" style="background:#333; color:white; padding:5px; width:40px;">-</button> 
+                    <button onclick="adj('${teamId}', 100)" style="background:#333; color:white; padding:5px; width:40px;">+</button>`;
+                container.appendChild(card);
+            }
+        }
+
+        function adj(id, amt) {
+            const el = document.getElementById(id);
+            el.innerText = parseInt(el.innerText) + amt;
+        }
+
+        function pickRandomTeam() {
+            const teams = document.querySelectorAll('.team-card');
+            if(teams.length === 0) return;
+            teams.forEach(t => t.classList.remove('highlight'));
+            const rand = Math.floor(Math.random() * teams.length);
+            teams[rand].classList.add('highlight');
+            setTimeout(() => teams[rand].classList.remove('highlight'), 4000);
+        }
+
+        // 3. EDITOR & GRID (5 TIERS)
+        function openEditor() {
+            document.getElementById('modal').style.display = 'block';
+            buildEditorFields();
+        }
+
+        function buildEditorFields() {
+            const num = document.getElementById('cat-num-select').value;
+            const container = document.getElementById('editor-fields');
+            container.innerHTML = "";
+            const values = [200, 400, 600, 800, 1000];
+            for(let i=1; i<=num; i++) {
+                let col = document.createElement('div');
+                col.className = "cat-column";
+                let html = `<input type="text" placeholder="Category ${i}" class="cat-name-in" id="cname-${i}">`;
+                values.forEach((val, index) => {
+                    const rowIdx = index + 1;
+                    html += `<div style="margin-bottom:8px; border-bottom:1px solid #444; padding-bottom:3px;">
+                        <span style="font-size:0.75em; color:var(--accent)">$${val}</span>
+                        <input type="text" placeholder="Q" class="q-in" data-cat="${i}" data-idx="${rowIdx}">
+                        <input type="text" placeholder="A" class="a-in" data-cat="${i}" data-idx="${rowIdx}">
+                    </div>`;
+                });
+                col.innerHTML = html;
+                container.appendChild(col);
+            }
+        }
+
+        function applyChanges() {
+            const num = document.getElementById('cat-num-select').value;
+            const grid = document.getElementById('main-grid');
+            grid.innerHTML = "";
+            grid.style.gridTemplateColumns = `repeat(${num}, 1fr)`;
+            
+            for(let i=1; i<=num; i++) {
+                const head = document.createElement('div');
+                head.className = 'category-header';
+                head.innerText = document.getElementById(`cname-${i}`).value || "Category " + i;
+                grid.appendChild(head);
+            }
+            
+            const values = [200, 400, 600, 800, 1000];
+            values.forEach((val, vIdx) => {
+                const rowIdx = vIdx + 1;
+                for(let i=1; i<=num; i++) {
+                    const qIn = document.querySelector(`.q-in[data-cat="${i}"][data-idx="${rowIdx}"]`);
+                    const aIn = document.querySelector(`.a-in[data-cat="${i}"][data-idx="${rowIdx}"]`);
+                    const qVal = qIn ? qIn.value : "";
+                    const aVal = aIn ? aIn.value : "";
+                    
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.innerText = `$${val}`;
+                    cell.onclick = function() {
+                        if(!this.classList.contains('used') && qVal) {
+                            alert(`QUESTION:\n${qVal}\n\nANSWER:\n${aVal}`);
+                            this.classList.add('used');
+                        }
+                    };
+                    grid.appendChild(cell);
+                }
+            });
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        // 4. IMPORT / EXPORT
+        function exportData() {
+            const data = { catCount: document.getElementById('cat-num-select').value, categories: [] };
+            for(let i=1; i<=data.catCount; i++) {
+                let catObj = { name: document.getElementById(`cname-${i}`).value, items: [] };
+                for(let j=1; j<=5; j++) {
+                    catObj.items.push({
+                        q: document.querySelector(`.q-in[data-cat="${i}"][data-idx="${j}"]`).value,
+                        a: document.querySelector(`.a-in[data-cat="${i}"][data-idx="${j}"]`).value
+                    });
+                }
+                data.categories.push(catObj);
+            }
+            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = "trivia_lesson.json";
+            a.click();
+        }
+
+        function importData(event) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = JSON.parse(e.target.result);
+                document.getElementById('cat-num-select').value = data.catCount;
+                buildEditorFields();
+                setTimeout(() => {
+                    data.categories.forEach((cat, i) => {
+                        const idx = i + 1;
+                        if(document.getElementById(`cname-${idx}`)) document.getElementById(`cname-${idx}`).value = cat.name;
+                        cat.items.forEach((item, j) => {
+                            const qIdx = j + 1;
+                            const qField = document.querySelector(`.q-in[data-cat="${idx}"][data-idx="${qIdx}"]`);
+                            const aField = document.querySelector(`.a-in[data-cat="${idx}"][data-idx="${qIdx}"]`);
+                            if(qField) qField.value = item.q;
+                            if(aField) aField.value = item.a;
+                        });
+                    });
+                }, 100);
+            };
+            reader.readAsText(event.target.files[0]);
+        }
+
+        window.onload = () => { initTeams(); buildEditorFields(); };
+    </script>
+</body>
+</html>
