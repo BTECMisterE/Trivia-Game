@@ -1,35 +1,30 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Ultimate Trivia - Clue/Answer Mode</title>
+    <title>Ultimate Trivia - Master Pro</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         :root { --main-blue: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; --dark: #16213e; }
-        body { background: var(--main-blue); color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding-bottom: 120px; }
+        body { background: var(--main-blue); color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding-bottom: 120px; overflow-x: hidden; }
         
-        /* Scoreboard */
         .scoreboard { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; padding: 20px; background: rgba(0,0,0,0.3); }
         .team-card { background: var(--dark); border: 2px solid var(--accent); padding: 15px; border-radius: 10px; min-width: 140px; }
         .team-card.highlight { border-color: var(--gold); box-shadow: 0 0 20px var(--gold); transform: scale(1.05); }
         .score-display { font-size: 2.5em; color: var(--gold); font-weight: bold; }
         
-        /* Game Grid */
         .grid { display: grid; gap: 10px; padding: 20px; max-width: 98%; margin: 0 auto; }
         .category-header { font-weight: bold; text-transform: uppercase; color: var(--accent); border-bottom: 3px solid var(--accent); padding: 10px; font-size: 1.1em; }
         .cell { background: var(--dark); border: 2px solid #333; color: var(--gold); font-size: 2em; padding: 25px 0; cursor: pointer; border-radius: 8px; }
         .cell.used { opacity: 0.1; background: #000; cursor: default; }
         
-        /* Question Theater Overlay */
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--main-blue); z-index:500; flex-direction: column; justify-content: center; align-items: center; padding: 50px; box-sizing: border-box; }
-        #theater-text { font-size: 4em; font-weight: bold; margin-bottom: 30px; line-height: 1.2; }
-        #theater-answer { font-size: 3em; color: var(--gold); display: none; margin-top: 20px; border-top: 2px solid #333; padding-top: 20px; }
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--main-blue); z-index:500; flex-direction: column; justify-content: center; align-items: center; padding: 50px; box-sizing: border-box; cursor: pointer;}
+        #theater-text { font-size: 3.5em; font-weight: bold; margin-bottom: 30px; }
+        #theater-answer { font-size: 2.5em; color: var(--gold); display: none; margin-top: 20px; border-top: 2px solid #333; padding-top: 20px; }
 
-        /* Admin/Buzzer Bars */
         #admin-bar { position: fixed; bottom: 0; width: 100%; background: #111; padding: 15px; display: flex; justify-content: center; gap: 15px; align-items: center; border-top: 2px solid var(--accent); z-index: 100; }
         #buzzer-alert { background: #e94560; color: white; font-size: 2em; padding: 20px; margin: 10px auto; width: 80%; border-radius: 10px; display: none; border: 4px solid white; }
 
-        /* Modal & Editor */
         #modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:600; overflow-y: auto; padding: 20px; text-align: left; }
         .editor-container { background: var(--main-blue); padding: 25px; border: 2px solid var(--accent); max-width: 1200px; margin: auto; border-radius: 15px; }
         .setup-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 15px; }
@@ -45,9 +40,9 @@
     <div class="grid" id="main-grid"></div>
 
     <div id="theater" onclick="handleTheaterClick()">
-        <div id="theater-text">CLUE GOES HERE</div>
-        <div id="theater-answer">ANSWER GOES HERE</div>
-        <button onclick="closeTheater(event)" style="position:absolute; bottom:30px; background:#444; color:white; padding:15px 30px;">CLOSE & BACK TO BOARD</button>
+        <div id="theater-text">CLUE</div>
+        <div id="theater-answer">ANSWER</div>
+        <button onclick="closeTheater(event)" style="position:absolute; bottom:30px; background:#444; color:white;">CLOSE & RETURN</button>
     </div>
 
     <div id="admin-bar">
@@ -62,8 +57,8 @@
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px;">
                 <h2>Trivia Editor</h2>
                 <div>
-                    <button onclick="exportData()" style="background:#6f42c1; color:white; font-size:11px;">💾 DOWNLOAD</button>
-                    <button onclick="document.getElementById('file-input').click()" style="background:#6f42c1; color:white; font-size:11px;">📁 LOAD</button>
+                    <button onclick="exportData()" style="background:#6f42c1; color:white;">💾 SAVE FILE</button>
+                    <button onclick="document.getElementById('file-input').click()" style="background:#6f42c1; color:white;">📁 LOAD FILE</button>
                     <input type="file" id="file-input" style="display:none" onchange="importData(event)">
                     Cats: 
                     <select id="cat-num-select" onchange="buildEditorFields()">
@@ -72,7 +67,7 @@
                 </div>
             </div>
             <div id="editor-fields" class="setup-row"></div>
-            <button onclick="applyChanges()" style="background:#28a745; color:white; width:100%; padding:15px; margin-top:20px; font-size:1.2em;">APPLY & UPDATE BOARD</button>
+            <button onclick="applyChanges()" style="background:#28a745; color:white; width:100%; padding:15px; margin-top:20px;">UPDATE BOARD</button>
             <button onclick="document.getElementById('modal').style.display='none'" style="background:#444; color:white; width:100%; margin-top:10px;">Cancel</button>
         </div>
     </div>
@@ -90,42 +85,55 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // 1. BUZZER LOGIC
+        // BUZZER
         db.ref('currentBuzz').on('value', (snap) => {
             const val = snap.val();
-            if(val && val.user) {
-                document.getElementById('buzzer-alert').style.display = 'block';
-                document.getElementById('winner').innerText = val.user.toUpperCase() + " (" + (val.team || "No Team") + ")";
-            } else { document.getElementById('buzzer-alert').style.display = 'none'; }
+            document.getElementById('buzzer-alert').style.display = val ? 'block' : 'none';
+            if(val) document.getElementById('winner').innerText = val.user.toUpperCase() + " (" + (val.team || "") + ")";
         });
-
         function resetBuzzer() { db.ref('currentBuzz').set(null); }
 
-        // 2. THEATER LOGIC (New)
+        // THEATER
         let theaterStep = 0;
         function openTheater(clue, answer, cell) {
-            theaterStep = 1; // 1 = Clue shown
+            theaterStep = 1;
             document.getElementById('theater-text').innerText = clue;
             document.getElementById('theater-answer').innerText = answer;
             document.getElementById('theater-answer').style.display = 'none';
             document.getElementById('theater').style.display = 'flex';
             cell.classList.add('used');
+            db.ref('currentQuestion').set(clue);
         }
-
         function handleTheaterClick() {
-            if (theaterStep === 1) {
+            if(theaterStep === 1) {
                 document.getElementById('theater-answer').style.display = 'block';
-                theaterStep = 2; // 2 = Answer shown
+                theaterStep = 2;
             }
         }
-
-        function closeTheater(event) {
-            event.stopPropagation(); // Prevents clicking the background while closing
+        function closeTheater(e) {
+            e.stopPropagation();
             document.getElementById('theater').style.display = 'none';
+            db.ref('currentQuestion').set(null);
         }
 
-        // 3. EDITOR & GRID (Updated applyChanges)
-        function applyChanges() {
+        // EDITOR
+        function openEditor() { document.getElementById('modal').style.display = 'block'; buildEditorFields(); }
+        
+        function buildEditorFields() {
             const num = document.getElementById('cat-num-select').value;
-            const grid = document.getElementById('main-grid');
-            grid
+            const container = document.getElementById('editor-fields');
+            container.innerHTML = "";
+            const vals = [200, 400, 600, 800, 1000];
+            for(let i=1; i<=num; i++) {
+                let col = document.createElement('div');
+                col.className = "cat-column";
+                col.innerHTML = `<input type="text" placeholder="Category ${i}" class="cat-name-in" id="cname-${i}" style="background:var(--accent); color:black;">`;
+                vals.forEach((v, idx) => {
+                    col.innerHTML += `<div style="margin-bottom:8px; border-bottom:1px solid #444;">
+                        <span style="font-size:0.7em; color:var(--accent)">$${v}</span>
+                        <input type="text" placeholder="Q" class="q-in" data-cat="${i}" data-idx="${idx+1}">
+                        <input type="text" placeholder="A" class="a-in" data-cat="${i}" data-idx="${idx+1}">
+                    </div>`;
+                });
+                container.appendChild(col);
+            }
