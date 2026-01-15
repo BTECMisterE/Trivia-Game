@@ -130,4 +130,50 @@
 
         function buildBoard() {
             const grid = document.getElementById('main-grid');
-            
+            grid.innerHTML = "";
+            for(let c=1; c<=6; c++) {
+                let h = document.createElement('div'); h.className='cat-h';
+                h.innerText = document.getElementById('cn-'+c).value || "CAT "+c;
+                grid.appendChild(h);
+            }
+            [200,400,600,800,1000].forEach(val => {
+                for(let c=1; c<=6; c++) {
+                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${val}"]`).value;
+                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${val}"]`).value;
+                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+val;
+                    cell.onclick = () => { if(q) { 
+                        document.getElementById('q-box').innerText=q; document.getElementById('a-box').innerText=a;
+                        document.getElementById('a-box').style.display='none'; document.getElementById('theater').style.display='flex';
+                        cell.classList.add('used'); if(rRef) rRef.child('currentQuestion').set(q);
+                    }};
+                    grid.appendChild(cell);
+                }
+            });
+        }
+
+        // Initialize Editor
+        const area = document.getElementById('editor-container');
+        for(let c=1; c<=6; c++) {
+            let col = document.createElement('div'); col.className = 'ed-col';
+            col.innerHTML = `<strong>CAT ${c}</strong><br><input type="text" id="cn-${c}" placeholder="Name">`;
+            [200,400,600,800,1000].forEach(v => {
+                col.innerHTML += `<input type="text" placeholder="Q" class="qi" data-c="${c}" data-v="${v}">`;
+                col.innerHTML += `<input type="text" placeholder="A" class="ai" data-c="${c}" data-v="${v}">`;
+            });
+            area.appendChild(col);
+        }
+
+        function adj(num, amt) {
+            const el = document.getElementById('s-'+num);
+            const ns = parseInt(el.innerText) + amt;
+            rRef.child('scores/team'+num).set(ns);
+        }
+        function resetBuzzer() { if(rRef) rRef.child('currentBuzz').set(null); }
+        function importJSON(e) {
+            const reader = new FileReader();
+            reader.onload = (ev) => fillEditor(JSON.parse(ev.target.result));
+            reader.readAsText(e.target.files[0]);
+        }
+    </script>
+</body>
+</html>
