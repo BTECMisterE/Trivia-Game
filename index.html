@@ -84,4 +84,132 @@
 
         // THEATER SCRIPT
         let theaterStep = 0;
-        function open
+        function openTheater(clue, answer, cell) {
+            theaterStep = 1;
+            document.getElementById('theater-text').innerText = clue;
+            document.getElementById('theater-answer').innerText = answer;
+            document.getElementById('theater-answer').style.display = 'none';
+            document.getElementById('theater').style.display = 'flex';
+            cell.classList.add('used');
+            db.ref('currentQuestion').set(clue);
+        }
+        function handleTheaterClick() {
+            if(theaterStep === 1) {
+                document.getElementById('theater-answer').style.display = 'block';
+                theaterStep = 2;
+            }
+        }
+        function closeTheater(e) {
+            e.stopPropagation();
+            document.getElementById('theater').style.display = 'none';
+            db.ref('currentQuestion').set(null);
+        }
+
+        // EDITOR SCRIPT
+        function buildEditorFields() {
+            const num = document.getElementById('cat-num-select').value;
+            const container = document.getElementById('editor-fields');
+            container.innerHTML = "";
+            const vals = [200, 400, 600, 800, 1000];
+            for(let i=1; i<=num; i++) {
+                let col = document.createElement('div');
+                col.className = "cat-column";
+                col.innerHTML = `<input type="text" placeholder="Category ${i}" class="cat-name-in" id="cname-${i}">`;
+                vals.forEach((v, idx) => {
+                    col.innerHTML += `<div style="margin-bottom:8px; border-bottom:1px solid #444;">
+                        <span style="font-size:0.7em; color:var(--accent)">$${v}</span>
+                        <input type="text" placeholder="Q" class="q-in" data-cat="${i}" data-idx="${idx+1}">
+                        <input type="text" placeholder="A" class="a-in" data-cat="${i}" data-idx="${idx+1}">
+                    </div>`;
+                });
+                container.appendChild(col);
+            }
+        }
+
+        function applyChanges() {
+            const num = document.getElementById('cat-num-select').value;
+            const grid = document.getElementById('main-grid');
+            grid.innerHTML = "";
+            grid.style.gridTemplateColumns = `repeat(${num}, 1fr)`;
+            for(let i=1; i<=num; i++) {
+                const h = document.createElement('div');
+                h.className = 'category-header';
+                h.innerText = document.getElementById(`cname-${i}`).value || "Category "+i;
+                grid.appendChild(h);
+            }
+            const vals = [200, 400, 600, 800, 1000];
+            vals.forEach((v, vIdx) => {
+                for(let i=1; i<=num; i++) {
+                    const qInput = document.querySelector(`.q-in[data-cat="${i}"][data-idx="${vIdx+1}"]`);
+                    const aInput = document.querySelector(`.a-in[data-cat="${i}"][data-idx="${vIdx+1}"]`);
+                    const q = qInput ? qInput.value : "";
+                    const a = aInput ? aInput.value : "";
+                    const cell = document.createElement('div');
+                    cell.className = 'cell'; cell.innerText = "$"+v;
+                    cell.onclick = function() { if(!this.classList.contains('used') && q) openTheater(q, a, this); };
+                    grid.appendChild(cell);
+                }
+            });
+            window.scrollTo(0,0); // Scroll up to see the board
+        }
+
+        // TEAMS SCRIPT
+        function initTeams() {
+            const count = document.getElementById('team-count').value;
+            db.ref('settings/teamCount').set(parseInt(count));
+            const container = document.getElementById('scoreboard-container');
+            container.innerHTML = "";
+            for(let i=1; i<=count; i++) {
+                const teamId = 't'+i;
+                const card = document.createElement('div');
+                card.style = "background:var(--dark); border:1px solid var(--accent); padding:10px; border-radius:10px; min-width:120px;";
+                card.innerHTML = `<input type="text" value="Team ${i}" style="background:transparent; border:none; color:white; text-align:center; width:100%; border-bottom:1px solid #444; margin-bottom:5px;">
+                    <div style="font-size:2em; color:var(--gold); font-weight:bold;" id="${teamId}">0</div>
+                    <button onclick="adj('${teamId}', -100)">-</button><button onclick="adj('${teamId}', 100)">+</button>`;
+                container.appendChild(card);
+            }
+        }
+        function adj(id, amt) { const el = document.getElementById(id); el.innerText = parseInt(el.innerText) + amt; }
+
+        // DATA SCRIPT
+        function exportData() {
+            const data = { catCount: document.getElementById('cat-num-select').value, categories: [] };
+            for(let i=1; i<=data.catCount; i++) {
+                let cat = { name: document.getElementById(`cname-${i}`).value, items: [] };
+                for(let j=1; j<=5; j++) {
+                    cat.items.push({
+                        q: document.querySelector(`.q-in[data-cat="${i}"][data-idx="${j}"]`).value,
+                        a: document.querySelector(`.a-in[data-cat="${i}"][data-idx="${j}"]`).value
+                    });
+                }
+                data.categories.push(cat);
+            }
+            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = "lesson.json"; a.click();
+        }
+
+        function importData(e) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const d = JSON.parse(ev.target.result);
+                document.getElementById('cat-num-select').value = d.catCount;
+                buildEditorFields();
+                setTimeout(() => {
+                    d.categories.forEach((cat, i) => {
+                        const idx = i + 1;
+                        document.getElementById(`cname-${idx}`).value = cat.name;
+                        cat.items.forEach((item, j) => {
+                            document.querySelector(`.q-in[data-cat="${idx}"][data-idx="${j+1}"]`).value = item.q;
+                            document.querySelector(`.a-in[data-cat="${idx}"][data-idx="${j+1}"]`).value = item.a;
+                        });
+                    });
+                }, 100);
+            };
+            reader.readAsText(e.target.files[0]);
+        }
+
+        window.onload = () => { initTeams(); buildEditorFields(); };
+    </script>
+</body>
+</html>
