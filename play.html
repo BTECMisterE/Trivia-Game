@@ -6,52 +6,79 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #121212; color: white; text-align: center; font-family: sans-serif; padding-top: 50px; }
+        body { background: #121212; color: white; text-align: center; font-family: sans-serif; padding-top: 30px; }
         #buzzer-btn { 
-            width: 280px; height: 280px; border-radius: 50%; 
+            width: 250px; height: 250px; border-radius: 50%; 
             background: #e94560; color: white; font-size: 40px; 
             font-weight: bold; border: 10px solid #533440;
-            box-shadow: 0 15px #9a2d3f; transition: 0.1s;
+            box-shadow: 0 10px #9a2d3f; margin-top: 20px;
         }
-        #buzzer-btn:active { box-shadow: 0 5px #9a2d3f; transform: translateY(10px); }
-        #buzzer-btn:disabled { background: #444; box-shadow: none; opacity: 0.5; border-color: #222; }
-        input { padding: 15px; width: 80%; font-size: 18px; margin-bottom: 30px; border-radius: 5px; border: none; }
+        #buzzer-btn:active { box-shadow: 0 2px #9a2d3f; transform: translateY(8px); }
+        #buzzer-btn:disabled { background: #444; opacity: 0.5; box-shadow: none; }
+        .info { margin-bottom: 10px; font-size: 1.2em; color: #00d2ff; }
+        input { padding: 12px; width: 80%; border-radius: 5px; border: none; margin-bottom: 20px; font-size: 16px; }
+        button.join { padding: 15px 30px; background: #00d2ff; border: none; border-radius: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
     <h2>ULTIMATE TRIVIA</h2>
-    <input type="text" id="username" placeholder="Enter Your Name">
-    <br>
-    <button id="buzzer-btn" onclick="sendBuzz()">BUZZ</button>
+    
+    <div id="setup-area">
+        <input type="text" id="username" placeholder="Enter Your Name">
+        <button class="join" onclick="joinGame()">JOIN GAME</button>
+    </div>
+
+    <div id="game-area" style="display:none;">
+        <div class="info"><span id="display-name"></span></div>
+        <div class="info" style="color:gold; font-weight: bold;">YOUR TEAM: <span id="display-team"></span></div>
+        <button id="buzzer-btn" onclick="sendBuzz()">BUZZ</button>
+    </div>
 
     <script>
-        const firebaseConfig = {apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-  authDomain: "trivia-game-3fe59.firebaseapp.com",
-  databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-  projectId: "trivia-game-3fe59",
-  storageBucket: "trivia-game-3fe59.firebasestorage.app",
-  messagingSenderId: "851139559118",
-  appId: "1:851139559118:web:df59f13dfd9234c1e89a9f",
-  measurementId: "G-GC3LZ9K9YZ" };
+        const firebaseConfig = {
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            storageBucket: "trivia-game-3fe59.firebasestorage.app",
+            messagingSenderId: "851139559118",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f",
+            measurementId: "G-GC3LZ9K9YZ"
+        };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Disable button if someone has already buzzed
+        let myTeam = "";
+
+        function joinGame() {
+            const name = document.getElementById('username').value.trim();
+            if(!name) return alert("Please enter your name!");
+
+            db.ref('settings/teamCount').once('value').then((snap) => {
+                const count = snap.val() || 3;
+                const randomNum = Math.floor(Math.random() * count) + 1;
+                myTeam = "Team " + randomNum;
+
+                document.getElementById('setup-area').style.display = 'none';
+                document.getElementById('game-area').style.display = 'block';
+                document.getElementById('display-name').innerText = name;
+                document.getElementById('display-team').innerText = myTeam;
+            });
+        }
+
+        function sendBuzz() {
+            const name = document.getElementById('display-name').innerText;
+            db.ref('currentBuzz').transaction((curr) => {
+                if (curr === null) return { user: name, team: myTeam, ts: Date.now() };
+                return;
+            });
+        }
+
         db.ref('currentBuzz').on('value', (snap) => {
             document.getElementById('buzzer-btn').disabled = (snap.val() !== null);
         });
 
-        function sendBuzz() {
-            const name = document.getElementById('username').value;
-            if(!name) return alert("Please enter your name!");
-            
-            db.ref('currentBuzz').transaction((current) => {
-                if (current === null) {
-                    return { user: name, timestamp: Date.now() };
-                }
-                return; 
-            });
-        }
+        db.ref('settings/sessionID').on('value', () => { location.reload(); });
     </script>
 </body>
 </html>
