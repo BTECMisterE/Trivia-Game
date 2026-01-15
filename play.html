@@ -1,21 +1,119 @@
-<div id="question-display" style="display:none; background:#00d2ff; color:black; padding:15px; border-radius:10px; margin-bottom:20px; font-weight:bold; font-size:1.1em;">
-    WAITING FOR QUESTION...
-</div>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Trivia Buzzer</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        body { background: #121212; color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 20px; overflow: hidden; }
+        
+        /* Join Screen */
+        #setup-area { margin-top: 50px; }
+        input { padding: 15px; width: 80%; border-radius: 8px; border: 1px solid #444; background: #000; color: white; font-size: 18px; margin-bottom: 20px; }
+        .btn-join { padding: 15px 30px; background: #00d2ff; color: black; border: none; border-radius: 8px; font-weight: bold; font-size: 18px; width: 85%; }
 
-<script>
-    // Add this listener at the bottom of your script
-    db.ref('currentQuestion').on('value', (snap) => {
-        const qText = snap.val();
-        const qBox = document.getElementById('question-display');
-        const bBtn = document.getElementById('buzzer-btn');
-
-        if (qText) {
-            qBox.innerText = qText;
-            qBox.style.display = 'block';
-            // Optional: Hide buzzer until question is pushed? 
-            // Or leave it so they can "race" to read it.
-        } else {
-            qBox.style.display = 'none';
+        /* Play Screen */
+        #game-area { display: none; }
+        #q-box { background: #00d2ff; color: black; padding: 15px; border-radius: 10px; margin-bottom: 20px; font-weight: bold; font-size: 1.2em; display: none; }
+        
+        #buzzer-btn { 
+            width: 260px; height: 260px; border-radius: 50%; 
+            background: #e94560; color: white; font-size: 40px; 
+            font-weight: bold; border: 10px solid #533440;
+            box-shadow: 0 10px #9a2d3f; margin: 20px auto; 
+            cursor: pointer; display: block;
         }
-    });
-</script>
+        #buzzer-btn:active { box-shadow: 0 2px #9a2d3f; transform: translateY(6px); }
+        #buzzer-btn:disabled { background: #333; border-color: #222; box-shadow: none; color: #666; }
+
+        .team-info { color: #ffd700; font-size: 1.2em; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h2>TRIVIA BUZZER</h2>
+
+    <div id="setup-area">
+        <input type="text" id="username" placeholder="Your Name" autocomplete="off">
+        <button class="btn-join" onclick="joinGame()">JOIN GAME</button>
+    </div>
+
+    <div id="game-area">
+        <div id="q-box">QUESTION VISIBLE HERE</div>
+        <div class="team-info"><span id="display-name"></span> | <span id="display-team"></span></div>
+        <button id="buzzer-btn" onclick="sendBuzz()">BUZZ</button>
+    </div>
+
+    <script>
+        // CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            storageBucket: "trivia-game-3fe59.firebasestorage.app",
+            messagingSenderId: "851139559118",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let myName = "";
+        let myTeam = "";
+
+        // Function to Join
+        function joinGame() {
+            const val = document.getElementById('username').value.trim();
+            if(!val) return alert("Enter your name!");
+            
+            myName = val;
+
+            // Get team count from teacher's current setting
+            db.ref('settings/teamCount').once('value').then((snap) => {
+                const count = snap.val() || 3;
+                const randomNum = Math.floor(Math.random() * count) + 1;
+                myTeam = "Team " + randomNum;
+
+                document.getElementById('setup-area').style.display = 'none';
+                document.getElementById('game-area').style.display = 'block';
+                document.getElementById('display-name').innerText = myName;
+                document.getElementById('display-team').innerText = myTeam;
+            });
+        }
+
+        // Function to Buzz
+        function sendBuzz() {
+            db.ref('currentBuzz').transaction((current) => {
+                if (current === null) {
+                    return { user: myName, team: myTeam, ts: Date.now() };
+                }
+                return; // Already someone there
+            });
+        }
+
+        // Sync Question Text
+        db.ref('currentQuestion').on('value', (snap) => {
+            const qText = snap.val();
+            const qBox = document.getElementById('q-box');
+            if(qText) {
+                qBox.innerText = qText;
+                qBox.style.display = 'block';
+            } else {
+                qBox.style.display = 'none';
+            }
+        });
+
+        // Sync Buzzer Lockout
+        db.ref('currentBuzz').on('value', (snap) => {
+            const isBusy = (snap.val() !== null);
+            document.getElementById('buzzer-btn').disabled = isBusy;
+        });
+
+        // Auto-Refresh if teacher resets session
+        db.ref('settings/sessionID').on('value', () => {
+            if(myName) location.reload();
+        });
+    </script>
+</body>
+</html>
