@@ -1,13 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Persistent Scores</title>
+    <title>Trivia Master - Pro Board</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
         .box { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; margin-bottom: 20px; }
         
+        /* Floating Room Panel */
+        .room-panel { position: fixed; top: 10px; right: 10px; background: white; color: black; padding: 10px; border-radius: 10px; z-index: 1000; box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: none; }
+        #qrcode { margin-top: 5px; }
+
         /* Scoreboard */
         #score-area { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
         .score-card { background: #16213e; border: 1px solid #ffd700; padding: 10px; border-radius: 8px; min-width: 100px; }
@@ -20,8 +25,7 @@
         .cell.used { opacity: 0.1; }
 
         /* Overlays */
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:100; flex-direction: column; justify-content: center; align-items: center; }
-        #editor-section { display: block; }
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
         .editor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; text-align: left; }
         .ed-col { background: #222; padding: 10px; border-radius: 5px; }
         input { width: 90%; margin-bottom: 5px; background: #000; color: #fff; border: 1px solid #444; padding: 5px; font-size: 11px; }
@@ -30,167 +34,27 @@
         .btn-blue { background: #00d2ff; color: #000; }
         .btn-purple { background: #6f42c1; color: #fff; }
         .btn-green { background: #28a745; color: #fff; width: 100%; padding: 20px; font-size: 1.2em; margin-top: 15px; }
+        .btn-red { background: #e94560; color: white; }
         .btn-gray { background: #444; color: white; }
         
-        #buzzer-ui { background: #e94560; padding: 20px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 200; border: 2px solid white; }
+        #buzzer-ui { background: #e94560; padding: 20px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 3000; border: 2px solid white; }
     </style>
 </head>
 <body>
 
     <div id="buzzer-ui">🔔 <span id="win-name">---</span> <button onclick="resetBuzzer()">RESET</button></div>
 
+    <div class="room-panel" id="room-panel">
+        <div id="room-label" style="font-weight:bold">ROOM: ---</div>
+        <div id="qrcode"></div>
+        <div style="font-size:10px; margin-top:5px">Scan to Join</div>
+    </div>
+
     <div class="box">
         <strong>1. SETUP:</strong> 
         Room: <input type="text" id="r-in" value="Class1" style="width:120px;">
         Teams: <input type="number" id="t-in" value="3" min="1" max="8" style="width:45px;">
         <button class="btn-blue" onclick="connect()">CONNECT & RESUME</button>
+        <button class="btn-red" onclick="clearAllScores()">RESET SCORES</button>
         <button class="btn-gray" onclick="toggleEd()">🛠 EDITOR</button>
-        <p id="status" style="color: yellow; margin-top: 10px;">Status: Not Connected</p>
-    </div>
-
-    <div id="score-area"></div>
-    <div id="main-grid" class="grid"></div>
-
-    <div id="theater" onclick="document.getElementById('a-box').style.display='block'">
-        <div id="q-box" style="font-size:3em; padding:30px;"></div>
-        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; border-top:1px solid #444; padding-top:20px;"></div>
-        <button onclick="event.stopPropagation(); document.getElementById('theater').style.display='none'" style="background:#444; color:white; margin-top:30px;">CLOSE</button>
-    </div>
-
-    <div id="editor-section" class="box">
-        <h3>2. BOARD EDITOR</h3>
-        <button class="btn-purple" onclick="document.getElementById('file-in').click()">📁 LOAD JSON</button>
-        <button class="btn-gray" onclick="exportJSON()">💾 SAVE JSON</button>
-        <input type="file" id="file-in" style="display:none" onchange="importJSON(event)">
-        <div id="editor-container" class="editor-grid"></div>
-        <button class="btn-green" onclick="generateBoard()">3. BUILD BOARD</button>
-    </div>
-
-    <script>
-        const config = {
-            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-            authDomain: "trivia-game-3fe59.firebaseapp.com",
-            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-            projectId: "trivia-game-3fe59",
-            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
-        };
-        firebase.initializeApp(config);
-        const db = firebase.database();
-        let rRef = null;
-
-        function connect() {
-            const roomName = document.getElementById('r-in').value.trim();
-            const teamNum = document.getElementById('t-in').value;
-            if(!roomName) return alert("Enter room name!");
-            rRef = db.ref('rooms/' + roomName);
-            
-            document.getElementById('status').innerText = "CONNECTED: " + roomName;
-            document.getElementById('status').style.color = "#0f0";
-            
-            // Sync Teams & Scores
-            initScoreboard(teamNum);
-
-            rRef.child('currentBuzz').on('value', s => {
-                const v = s.val();
-                document.getElementById('buzzer-ui').style.display = v ? 'block' : 'none';
-                if(v) document.getElementById('win-name').innerText = v.user.toUpperCase();
-            });
-            alert("Connected! Scores resumed from database.");
-        }
-
-        function initScoreboard(count) {
-            const area = document.getElementById('score-area');
-            area.innerHTML = "";
-            for(let i=1; i<=count; i++) {
-                let card = document.createElement('div');
-                card.className = "score-card";
-                card.innerHTML = `Team ${i}<br><span class="score-val" id="score-${i}">0</span>
-                <button onclick="adj(${i},-100)">-</button><button onclick="adj(${i},100)">+</button>`;
-                area.appendChild(card);
-                
-                // RESUME SCORE FROM DATABASE
-                rRef.child('scores/team'+i).on('value', s => {
-                    document.getElementById('score-'+i).innerText = s.val() || 0;
-                });
-            }
-        }
-
-        function adj(num, amt) {
-            const el = document.getElementById('score-'+num);
-            const newScore = parseInt(el.innerText) + amt;
-            rRef.child('scores/team'+num).set(newScore);
-        }
-
-        function resetBuzzer() { if(rRef) rRef.child('currentBuzz').set(null); }
-        function toggleEd() { const s = document.getElementById('editor-section'); s.style.display = (s.style.display==='none') ? 'block' : 'none'; }
-
-        // Editor UI
-        const area = document.getElementById('editor-container');
-        for(let c=1; c<=6; c++) {
-            let col = document.createElement('div');
-            col.className = 'ed-col';
-            col.innerHTML = `<strong>CAT ${c}</strong><br><input type="text" id="cn-${c}" placeholder="Category">`;
-            [200,400,600,800,1000].forEach(v => {
-                col.innerHTML += `<input type="text" placeholder="Q $${v}" class="qi" data-c="${c}" data-v="${v}">`;
-                col.innerHTML += `<input type="text" placeholder="A $${v}" class="ai" data-c="${c}" data-v="${v}">`;
-            });
-            area.appendChild(col);
-        }
-
-        function generateBoard() {
-            const grid = document.getElementById('main-grid');
-            grid.innerHTML = "";
-            for(let c=1; c<=6; c++) {
-                let h = document.createElement('div'); h.className='cat-h';
-                h.innerText = document.getElementById('cn-'+c).value || "CAT "+c;
-                grid.appendChild(h);
-            }
-            [200,400,600,800,1000].forEach(val => {
-                for(let c=1; c<=6; c++) {
-                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${val}"]`).value;
-                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${val}"]`).value;
-                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+val;
-                    cell.onclick = () => { if(q) { 
-                        document.getElementById('q-box').innerText=q; document.getElementById('a-box').innerText=a;
-                        document.getElementById('a-box').style.display='none'; document.getElementById('theater').style.display='flex';
-                        cell.classList.add('used'); if(rRef) rRef.child('currentQuestion').set(q);
-                    }};
-                    grid.appendChild(cell);
-                }
-            });
-            toggleEd();
-            window.scrollTo(0,0);
-        }
-
-        function importJSON(e) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const data = JSON.parse(ev.target.result);
-                data.categories.forEach((cat, i) => {
-                    const cId = i + 1;
-                    document.getElementById(`cn-${cId}`).value = cat.name;
-                    cat.items.forEach((item, j) => {
-                        const vL = [200,400,600,800,1000];
-                        document.querySelector(`.qi[data-c="${cId}"][data-v="${vL[j]}"]`).value = item.q;
-                        document.querySelector(`.ai[data-c="${cId}"][data-v="${vL[j]}"]`).value = item.a;
-                    });
-                });
-            };
-            reader.readAsText(e.target.files[0]);
-        }
-
-        function exportJSON() {
-            let data = { categories: [] };
-            for(let c=1; c<=6; c++) {
-                let cat = { name: document.getElementById('cn-'+c).value, items: [] };
-                [200,400,600,800,1000].forEach(v => {
-                    cat.items.push({ q: document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value, a: document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value });
-                });
-                data.categories.push(cat);
-            }
-            const blob = new Blob([JSON.stringify(data)], {type:"application/json"});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "lesson.json"; a.click();
-        }
-    </script>
-</body>
-</html>
+        
