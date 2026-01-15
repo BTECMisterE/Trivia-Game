@@ -115,5 +115,74 @@
             document.getElementById('a-text').innerText = a;
             document.getElementById('a-text').style.display = 'none';
             document.getElementById('theater').style.display = 'flex';
-            cell.classList.add('
-                               
+            cell.classList.add('used');
+            if(rRef) rRef.child('currentQuestion').set(q);
+        }
+        function showAns() { if(tStep===1) { document.getElementById('a-text').style.display='block'; tStep=2; } }
+        function closeTheater(e) { e.stopPropagation(); document.getElementById('theater').style.display='none'; if(rRef) rRef.child('currentQuestion').set(null); }
+
+        // Build Editor Columns
+        const area = document.getElementById('editor-container');
+        for(let c=1; c<=6; c++) {
+            let d = document.createElement('div');
+            d.className = "cat-col";
+            d.innerHTML = `<input type="text" placeholder="Category ${c}" id="cat-n-${c}" style="background:var(--accent); color:black; font-weight:bold;">`;
+            [200,400,600,800,1000].forEach(v => {
+                d.innerHTML += `<input type="text" placeholder="Q $${v}" class="qi" data-c="${c}" data-v="${v}">`;
+                d.innerHTML += `<input type="text" placeholder="A $${v}" class="ai" data-c="${c}" data-v="${v}">`;
+            });
+            area.appendChild(d);
+        }
+
+        function buildBoard() {
+            const grid = document.getElementById('main-grid');
+            grid.innerHTML = "";
+            for(let c=1; c<=6; c++) {
+                let h = document.createElement('div'); h.className='cat-h';
+                h.innerText = document.getElementById('cat-n-'+c).value || "CAT "+c;
+                grid.appendChild(h);
+            }
+            [200,400,600,800,1000].forEach(val => {
+                for(let c=1; c<=6; c++) {
+                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${val}"]`).value;
+                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${val}"]`).value;
+                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText = "$"+val;
+                    cell.onclick = () => { if(q) openTheater(q, a, cell); };
+                    grid.appendChild(cell);
+                }
+            });
+            if(rRef) rRef.child('settings/teamCount').set(3);
+        }
+
+        function importJSON(e) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const data = JSON.parse(ev.target.result);
+                data.categories.forEach((cat, i) => {
+                    const cId = i + 1;
+                    document.getElementById(`cat-n-${cId}`).value = cat.name;
+                    cat.items.forEach((item, j) => {
+                        const vList = [200,400,600,800,1000];
+                        document.querySelector(`.qi[data-c="${cId}"][data-v="${vList[j]}"]`).value = item.q;
+                        document.querySelector(`.ai[data-c="${cId}"][data-v="${vList[j]}"]`).value = item.a;
+                    });
+                });
+            };
+            reader.readAsText(e.target.files[0]);
+        }
+
+        function exportJSON() {
+            let data = { categories: [] };
+            for(let c=1; c<=6; c++) {
+                let cat = { name: document.getElementById('cat-n-'+c).value, items: [] };
+                [200,400,600,800,1000].forEach(v => {
+                    cat.items.push({ q: document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value, a: document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value });
+                });
+                data.categories.push(cat);
+            }
+            const blob = new Blob([JSON.stringify(data)], {type:"application/json"});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "lesson.json"; a.click();
+        }
+    </script>
+</body>
+</html>
