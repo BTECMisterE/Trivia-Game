@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trivia Game - Host Control</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --main-blue: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; --dark: #16213e; }
+        body { background: var(--main-blue); color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding-bottom: 120px; }
+        
+        /* UI Components */
+        .scoreboard { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; padding: 20px; background: rgba(0,0,0,0.3); }
+        .team-card { background: var(--dark); border: 2px solid var(--accent); padding: 15px; border-radius: 10px; min-width: 140px; }
+        .team-card.highlight { border-color: var(--gold); box-shadow: 0 0 20px var(--gold); transform: scale(1.05); }
+        .score-display { font-size: 2.5em; color: var(--gold); font-weight: bold; }
+        
+        .grid { display: grid; gap: 15px; padding: 30px; max-width: 95%; margin: 0 auto; }
+        .category-header { font-weight: bold; text-transform: uppercase; color: var(--accent); border-bottom: 3px solid var(--accent); padding: 10px; font-size: 1.1em; }
+        .cell { background: var(--dark); border: 2px solid #333; color: var(--gold); font-size: 2em; padding: 30px 0; cursor: pointer; border-radius: 8px; transition: 0.2s; }
+        .cell.used { opacity: 0.1; background: #000; cursor: default; }
+        
+        #admin-bar { position: fixed; bottom: 0; width: 100%; background: #111; padding: 15px; display: flex; justify-content: center; gap: 15px; align-items: center; border-top: 2px solid var(--accent); z-index: 100; }
+        #buzzer-alert { background: #e94560; color: white; font-size: 2em; padding: 20px; margin: 10px auto; width: 80%; border-radius: 10px; display: none; border: 4px solid white; }
+
+        /* Modal & Editor */
+        #modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:200; overflow-y: auto; padding: 20px; }
+        .editor-container { background: var(--main-blue); padding: 30px; border: 2px solid var(--accent); max-width: 1100px; margin: auto; border-radius: 15px; text-align: left; }
+        .setup-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .cat-column { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border: 1px solid #333; }
+        .cat-title-input { width: 90%; padding: 8px; margin-bottom: 10px; background: var(--accent); color: black; font-weight: bold; border: none; border-radius: 4px; }
+        .q-block input { width: 90%; margin: 2px 0; padding: 5px; background: #000; color: white; border: 1px solid #555; border-radius: 3px; font-size: 0.9em; }
+        
+        button { cursor: pointer; padding: 10px 15px; border-radius: 5px; border: none; font-weight: bold; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-file { background: #6f42c1; color: white; margin-right: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="scoreboard" id="scoreboard-container"></div>
+    <div id="buzzer-alert">🔔 <span id="winner">---</span> BUZZED!</div>
+    <div class="grid" id="main-grid"></div>
+
+    <div id="admin-bar">
+        <button onclick="pickRandomTeam()" style="background:var(--gold);">🎲 RANDOM TEAM</button>
+        <button onclick="resetBuzzer()" style="background:#e94560; color:white;">RESET BUZZERS</button>
+        <button onclick="document.getElementById('modal').style.display='block'" style="background:var(--accent);">📝 EDITOR</button>
+        <span style="color:#888; font-size: 0.9em;">Teams: <input type="number" id="team-count" value="3" min="2" max="6" style="width:35px" onchange="initTeams()"></span>
+    </div>
+
+    <div id="modal">
+        <div class="editor-container">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Trivia Editor</h2>
+                <div>
+                    <button class="btn-file" onclick="exportData()">💾 DOWNLOAD LESSON</button>
+                    <button class="btn-file" onclick="document.getElementById('file-input').click()">📁 LOAD LESSON</button>
+                    <input type="file" id="file-input" style="display:none" onchange="importData(event)">
+                    Categories: 
+                    <select id="cat-num-select" onchange="buildEditorForm()">
+                        <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="editor-fields" class="setup-row"></div>
+
+            <button class="btn-success" style="width:100%; padding:15px; margin-top:20px;" onclick="applyChanges()">APPLY & UPDATE BOARD</button>
+            <button onclick="document.getElementById('modal').style.display='none'" style="background:#444; color:white; width:100%; margin-top:10px;">Close</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            storageBucket: "trivia-game-3fe59.firebasestorage.app",
+            messagingSenderId: "851139559118",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f",
+            measurementId: "G-GC3LZ9K9YZ"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        function buildEditorForm() {
+            const num = document.getElementById('cat-num-select').value;
+            const container = document.getElementById('editor-fields');
+            container.innerHTML = "";
+            for(let i=1; i<=num; i++) {
+                let col = document.createElement('div');
+                col.className = "cat-column";
+                col.innerHTML = `<input type="text" placeholder="Category ${i}" class="cat-name-in" id="cname-${i}" style="width:90%; padding:8px; margin-bottom:10px; background:var(--accent); border:none; border-radius:4px; font-weight:bold;">`;
+                for(let j=1; j<=4; j++) {
+                    col.innerHTML += `<div style="margin-bottom:10px; border-bottom:1px solid #444;">
+                        <span style="font-size:0.7em; color:var(--accent)">$${j*200}</span><br>
+                        <input type="text" placeholder="Question" class="q-in" data-cat="${i}" data-idx="${j}" style="width:90%; background:#000; color:white; border:1px solid #555; margin-bottom:2px;">
+                        <input type="text" placeholder="Answer" class="a-in" data-cat="${i}" data-idx="${j}" style="width:90%; background:#000; color:white; border:1px solid #555;">
+                    </div>`;
+                }
+                container.appendChild(col);
+            }
+        }
+
+        function applyChanges() {
+            const num = document.getElementById('cat-num-select').value;
+            const grid = document.getElementById('main-grid');
+            grid.innerHTML = "";
+            grid.style.gridTemplateColumns = `repeat(${num}, 1fr)`;
+            for(let i=1; i<=num; i++) {
+                const head = document.createElement('div');
+                head.className = 'category-header';
+                head.innerText = document.getElementById(`cname-${i}`).value || "Category " + i;
+                grid.appendChild(head);
+            }
+            for(let j=1; j<=4; j++) {
+                for(let i=1; i<=num; i++) {
+                    const qVal = document.querySelector(`.q-in[data-cat="${i}"][data-idx="${j}"]`).value;
+                    const aVal = document.querySelector(`.a-in[data-cat="${i}"][data-idx="${j}"]`).value;
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.innerText = `$${j*200}`;
+                    cell.onclick = function() {
+                        if(!this.classList.contains('used') && qVal) {
+                            alert(`QUESTION:\n${qVal}\n\nANSWER:\n${aVal}`);
+                            this.classList.add('used');
+                        }
+                    };
+                    grid.appendChild(cell);
+                }
+            }
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        function exportData() {
+            const data = {
+                catCount: document.getElementById('cat-num-select').value,
+                categories: []
+            };
+            for(let i=1; i<=data.catCount; i++) {
+                let catObj = { name: document.getElementById(`cname-${i}`).value, items: [] };
+                for(let j=1; j<=4; j++) {
+                    catObj.items.push({
+                        q: document.querySelector(`.q-in[data-cat="${i}"][data-idx="${j}"]`).value,
+                        a: document.querySelector(`.a-in[data-cat="${i}"][data-idx="${j}"]`).value
+                    });
+                }
+                data.categories.push(catObj);
+            }
+            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = "trivia_lesson.json"; a.click();
+        }
+
+        function importData(event) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = JSON.parse(e.target.result);
+                document.getElementById('cat-num-select').value = data.catCount;
+                buildEditorForm();
+                data.categories.forEach((cat, i) => {
+                    const idx = i + 1;
+                    document.getElementById(`cname-${idx}`).value = cat.name;
+                    cat.items.forEach((item, j) => {
+                        const qIdx = j + 1;
