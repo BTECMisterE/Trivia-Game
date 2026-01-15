@@ -1,60 +1,78 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Emergency Test</title>
+    <title>Trivia Master - Verified Version</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; padding: 50px; }
-        .btn { background: #00d2ff; color: #000; padding: 20px 40px; font-size: 24px; font-weight: bold; border-radius: 10px; cursor: pointer; border: none; }
-        .btn:hover { background: #fff; }
-        #log { margin-top: 30px; color: #0f0; font-family: monospace; border: 1px solid #333; padding: 10px; display: inline-block; min-width: 300px; }
+        :root { --blue: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; }
+        body { background: var(--blue); color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
+        
+        /* Top Section */
+        .panel { background: #111; padding: 20px; border: 2px solid var(--accent); border-radius: 10px; margin-bottom: 20px; }
+        input.room-in { font-size: 20px; padding: 10px; width: 200px; background: #000; color: #fff; border: 1px solid #444; }
+        
+        /* The Board */
+        .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 20px 0; }
+        .cat-h { color: var(--accent); font-weight: bold; border-bottom: 2px solid var(--accent); padding: 5px; }
+        .cell { background: #16213e; border: 1px solid #333; color: var(--gold); font-size: 1.8em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
+        .cell.used { opacity: 0.1; }
+
+        /* Theater */
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--blue); z-index:100; flex-direction: column; justify-content: center; align-items: center; }
+        
+        /* Editor */
+        .editor { background: #111; padding: 20px; text-align: left; border-top: 4px solid var(--accent); }
+        .ed-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+        .ed-col { background: #222; padding: 8px; border-radius: 5px; }
+        .ed-col input { width: 90%; margin-bottom: 4px; font-size: 11px; background: #000; color: white; border: 1px solid #444; }
+        
+        button { cursor: pointer; font-weight: bold; border: none; border-radius: 5px; padding: 10px 20px; }
+        .btn-go { background: #28a745; color: white; width: 100%; font-size: 1.5em; margin-top: 15px; }
+        #buzzer { background: #e94560; padding: 15px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 200; border: 2px solid white; }
     </style>
 </head>
 <body>
 
-    <h1>TRIVIA SYSTEM TEST</h1>
-    <p>If you click this button and nothing happens, your browser is blocking the script.</p>
-    
-    <button class="btn" onclick="testClick()">TEST CONNECTION</button>
+    <div id="buzzer">🔔 <span id="win-name">---</span> <button onclick="resetBuzzer()">RESET</button></div>
 
-    <div id="status" style="margin-top:20px; font-size: 20px;">Status: Waiting...</div>
-    <div id="log">Console: Ready</div>
+    <div class="panel">
+        <strong>STEP 1:</strong> 
+        <input type="text" id="r-name" value="Class1" class="room-in">
+        <button onclick="startSession()" style="background:var(--accent); color:black;">CONNECT ROOM</button>
+        <div id="status" style="color:#0f0; margin-top:10px;">Status: Ready</div>
+    </div>
+
+    <div id="board" class="grid"></div>
+
+    <div id="theater" onclick="toggleAns()">
+        <div id="q-box" style="font-size:3em; padding:30px;"></div>
+        <div id="a-box" style="font-size:2em; color:var(--gold); display:none; border-top:1px solid #444; padding-top:20px;"></div>
+        <button onclick="event.stopPropagation(); document.getElementById('theater').style.display='none'" style="margin-top:30px;">CLOSE</button>
+    </div>
+
+    <div class="editor">
+        <h3>STEP 2: EDIT QUESTIONS</h3>
+        <button onclick="document.getElementById('file-in').click()" style="background:#6f42c1; color:white;">📁 LOAD JSON</button>
+        <input type="file" id="file-in" style="display:none" onchange="loadJSON(event)">
+        
+        <div id="ed-area" class="ed-grid"></div>
+        <button class="btn-go" onclick="updateBoard()">STEP 3: BUILD BOARD</button>
+    </div>
 
     <script>
-        function testClick() {
-            // 1. Immediate Visual Change
-            document.getElementById('status').innerText = "Status: BUTTON CLICKED!";
-            document.getElementById('status').style.color = "yellow";
-            
-            // 2. Alert Box (Hard to block)
-            alert("The button is working! Now attempting to connect to Firebase...");
+        const config = {
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
+        firebase.initializeApp(config);
+        const db = firebase.database();
+        let rRef = null;
 
-            try {
-                const firebaseConfig = {
-                    apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-                    authDomain: "trivia-game-3fe59.firebaseapp.com",
-                    databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-                    projectId: "trivia-game-3fe59",
-                    appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
-                };
-
-                if (!firebase.apps.length) {
-                    firebase.initializeApp(firebaseConfig);
-                }
-                
-                const db = firebase.database();
-                db.ref('test_connection').set(Date.now());
-                
-                document.getElementById('log').innerText = "Console: Firebase Connected Successfully!";
-                document.getElementById('status').innerText = "Status: SYSTEM ONLINE";
-                document.getElementById('status').style.color = "#0f0";
-
-            } catch (error) {
-                document.getElementById('log').innerText = "Console Error: " + error.message;
-                alert("Firebase Error: " + error.message);
-            }
-        }
-    </script>
-</body>
-</html>
+        function startSession() {
+            const name = document.getElementById('r-name').value.trim();
+            if(!name) return alert("Enter room name!");
+            rRef
