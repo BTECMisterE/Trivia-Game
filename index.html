@@ -1,44 +1,76 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Rescue Mode</title>
+    <title>Ultimate Trivia - 5 Tier Board</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        :root { --accent: #00d2ff; }
-        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; }
-        #modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:999; overflow-y:auto; padding:20px; }
-        .editor-box { background: #16213e; border: 2px solid var(--accent); padding: 20px; max-width: 900px; margin: auto; border-radius: 10px; }
-        .cat-col { background: rgba(255,255,255,0.1); padding: 10px; margin: 5px; display: inline-block; vertical-align: top; width: 250px; border-radius: 5px; }
-        input { width: 90%; margin: 3px 0; padding: 5px; display: block; margin-left: auto; margin-right: auto; }
-        .cat-header { background: var(--accent); color: black; font-weight: bold; border: none; }
-        .grid { display: grid; gap: 10px; padding: 20px; }
-        .cell { background: #16213e; border: 1px solid #444; padding: 30px; color: gold; font-size: 2em; cursor: pointer; }
-        #admin-bar { position: fixed; bottom: 0; width: 100%; background: #000; padding: 15px; }
+        :root { --main-blue: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; --dark: #16213e; }
+        body { background: var(--main-blue); color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding-bottom: 120px; }
+        
+        /* Scoreboard */
+        .scoreboard { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; padding: 20px; background: rgba(0,0,0,0.3); min-height: 100px; }
+        .team-card { background: var(--dark); border: 2px solid var(--accent); padding: 15px; border-radius: 10px; min-width: 150px; }
+        .team-card.highlight { border-color: var(--gold); box-shadow: 0 0 20px var(--gold); transform: scale(1.05); }
+        .score-display { font-size: 2.5em; color: var(--gold); font-weight: bold; margin: 5px 0; }
+        
+        /* Game Grid */
+        .grid { display: grid; gap: 10px; padding: 20px; max-width: 98%; margin: 0 auto; }
+        .category-header { font-weight: bold; text-transform: uppercase; color: var(--accent); border-bottom: 3px solid var(--accent); padding: 10px; font-size: 1.1em; }
+        .cell { background: var(--dark); border: 2px solid #333; color: var(--gold); font-size: 2em; padding: 25px 0; cursor: pointer; border-radius: 8px; }
+        .cell.used { opacity: 0.1; background: #000; cursor: default; }
+        
+        /* Admin Bar */
+        #admin-bar { position: fixed; bottom: 0; width: 100%; background: #111; padding: 15px; display: flex; justify-content: center; gap: 15px; align-items: center; border-top: 2px solid var(--accent); z-index: 100; }
+        #buzzer-alert { background: #e94560; color: white; font-size: 2em; padding: 20px; margin: 10px auto; width: 80%; border-radius: 10px; display: none; border: 4px solid white; }
+
+        /* Modal & Editor */
+        #modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:200; overflow-y: auto; padding: 20px; text-align: left; }
+        .editor-container { background: var(--main-blue); padding: 25px; border: 2px solid var(--accent); max-width: 1200px; margin: auto; border-radius: 15px; }
+        .setup-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 15px; }
+        .cat-column { background: rgba(255,255,255,0.05); padding: 8px; border-radius: 8px; border: 1px solid #333; }
+        
+        input { padding: 5px; border-radius: 4px; border: 1px solid #444; background: #000; color: white; width: 95%; margin-bottom: 3px; font-size: 0.85em; }
+        .cat-name-in { background: var(--accent); color: black; font-weight: bold; }
+        button { cursor: pointer; padding: 10px 15px; border-radius: 5px; border: none; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>TRIVIA BOARD</h1>
-    <div id="main-grid" class="grid"></div>
+    <div class="scoreboard" id="scoreboard-container"></div>
+    <div id="buzzer-alert">🔔 <span id="winner">---</span> BUZZED!</div>
+    <div class="grid" id="main-grid"></div>
 
     <div id="admin-bar">
-        <button onclick="openEditor()" style="padding:10px 20px; font-size: 1.2em;">📝 OPEN EDITOR</button>
-        <button onclick="resetBuzzer()" style="background: red; color: white; padding: 10px;">RESET BUZZER</button>
+        <button onclick="pickRandomTeam()" style="background:var(--gold);">🎲 RANDOM TEAM</button>
+        <button onclick="resetBuzzer()" style="background:#e94560; color:white;">RESET BUZZERS</button>
+        <button onclick="openEditor()" style="background:var(--accent);">📝 EDITOR</button>
+        <span style="color:#888;">Teams: <input type="number" id="team-count" value="3" min="1" max="6" style="width:40px" onchange="initTeams()"></span>
     </div>
 
     <div id="modal">
-        <div class="editor-box">
-            <h2>Editor</h2>
-            <div id="editor-content"></div>
-            <hr>
-            <button onclick="apply()" style="background: green; color: white; width: 100%; padding: 15px; font-size: 1.2em; cursor: pointer;">APPLY TO BOARD</button>
-            <button onclick="document.getElementById('modal').style.display='none'" style="margin-top: 10px;">Close</button>
+        <div class="editor-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px;">
+                <h2>Trivia Grid Editor ($200 - $1000)</h2>
+                <div>
+                    <button onclick="exportData()" style="background:#6f42c1; color:white; font-size:11px;">💾 DOWNLOAD</button>
+                    <button onclick="document.getElementById('file-input').click()" style="background:#6f42c1; color:white; font-size:11px;">📁 LOAD</button>
+                    <input type="file" id="file-input" style="display:none" onchange="importData(event)">
+                    Cats: 
+                    <select id="cat-num-select" onchange="buildEditorFields()" style="padding:5px;">
+                        <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="editor-fields" class="setup-row"></div>
+
+            <button onclick="applyChanges()" style="background:#28a745; color:white; width:100%; padding:15px; margin-top:20px; font-size:1.2em;">APPLY & UPDATE BOARD</button>
+            <button onclick="document.getElementById('modal').style.display='none'" style="background:#444; color:white; width:100%; margin-top:10px;">Cancel</button>
         </div>
     </div>
 
     <script>
-        // FIREBASE CONFIG
         const firebaseConfig = {
             apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
             authDomain: "trivia-game-3fe59.firebaseapp.com",
@@ -51,63 +83,10 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        function openEditor() {
-            const container = document.getElementById('editor-content');
-            container.innerHTML = ""; // Clear
-            
-            // We'll create 3 categories manually to ensure it works
-            for(let i=1; i<=3; i++) {
-                let div = document.createElement('div');
-                div.className = "cat-col";
-                div.innerHTML = `
-                    <input type="text" placeholder="Category Name" class="c-name" id="cn-${i}">
-                    <hr>
-                    <input type="text" placeholder="Q1" class="q-val" data-c="${i}">
-                    <input type="text" placeholder="A1" class="a-val" data-c="${i}">
-                    <br>
-                    <input type="text" placeholder="Q2" class="q-val" data-c="${i}">
-                    <input type="text" placeholder="A2" class="a-val" data-c="${i}">
-                `;
-                container.appendChild(div);
-            }
-            document.getElementById('modal').style.display = 'block';
-        }
-
-        function apply() {
-            const grid = document.getElementById('main-grid');
-            grid.innerHTML = "";
-            grid.style.gridTemplateColumns = "repeat(3, 1fr)";
-
-            // Build Headers
-            for(let i=1; i<=3; i++) {
-                let h = document.createElement('div');
-                h.innerText = document.getElementById('cn-'+i).value || "Category " + i;
-                h.style.fontWeight = "bold";
-                grid.appendChild(h);
-            }
-
-            // Simple demo for 2 rows
-            for(let row=0; row<2; row++) {
-                for(let col=1; col<=3; col++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'cell';
-                    cell.innerText = "$"+((row+1)*200);
-                    
-                    // Get data from the inputs we just filled
-                    const qFields = document.querySelectorAll(`.q-val[data-c="${col}"]`);
-                    const aFields = document.querySelectorAll(`.a-val[data-c="${col}"]`);
-                    
-                    cell.onclick = function() {
-                        alert("Q: " + qFields[row].value + "\n\nA: " + aFields[row].value);
-                        this.style.opacity = "0.2";
-                    }
-                    grid.appendChild(cell);
-                }
-            }
-            document.getElementById('modal').style.display = 'none';
-        }
-
-        function resetBuzzer() { db.ref('currentBuzz').set(null); }
-    </script>
-</body>
-</html>
+        // 1. BUZZER LOGIC
+        db.ref('currentBuzz').on('value', (snap) => {
+            const val = snap.val();
+            if(val && val.user) {
+                document.getElementById('buzzer-alert').style.display = 'block';
+                document.getElementById('winner').innerText = val.user.toUpperCase() + " (" + (val.team || "No Team") + ")";
+            } else { document.getElementById('buz
