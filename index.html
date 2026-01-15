@@ -1,373 +1,62 @@
 <!DOCTYPE html>
-<html><!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Multi-Room & QR</title>
+    <title>Trivia Master - Final Repair</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        :root { --main-blue: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; --dark: #16213e; }
-        body { background: var(--main-blue); color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding-bottom: 50px; }
+        :root { --main: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; }
+        body { background: var(--main); color: white; font-family: sans-serif; text-align: center; margin: 0; padding-bottom: 50px; }
         
-        .room-info-panel { position: fixed; top: 10px; right: 10px; background: white; padding: 10px; border-radius: 10px; color: black; z-index: 1001; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        #qrcode { margin-top: 5px; }
-        #room-id-display { font-weight: bold; color: var(--main-blue); font-size: 1.2em; }
+        /* Layout */
+        .room-panel { position: fixed; top: 10px; right: 10px; background: white; padding: 10px; border-radius: 10px; color: black; z-index: 1000; }
+        .grid { display: grid; gap: 10px; padding: 20px; margin-top: 80px; }
+        .category-header { font-weight: bold; color: var(--accent); border-bottom: 2px solid var(--accent); padding: 5px; }
+        .cell { background: #16213e; border: 1px solid #333; color: var(--gold); font-size: 2em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
+        .cell.used { opacity: 0.2; }
+        
+        /* Overlays */
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--main); z-index:2000; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; }
+        #theater-text { font-size: 3em; padding: 20px; }
+        #theater-ans { font-size: 2em; color: var(--gold); display: none; margin-top: 20px; }
 
-        .grid { display: grid; gap: 10px; padding: 20px; max-width: 98%; margin: 0 auto; margin-top: 60px; }
-        .category-header { font-weight: bold; text-transform: uppercase; color: var(--accent); border-bottom: 3px solid var(--accent); padding: 10px; }
-        .cell { background: var(--dark); border: 2px solid #333; color: var(--gold); font-size: 2em; padding: 25px 0; cursor: pointer; border-radius: 8px; }
-        .cell.used { opacity: 0.1; background: #000; cursor: default; }
+        /* Setup Area */
+        #setup { background: #111; padding: 30px; border-top: 4px solid var(--accent); text-align: left; margin-top: 50px; }
+        .setup-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+        .cat-box { background: #222; padding: 10px; border-radius: 5px; border: 1px solid #444; }
+        input { width: 90%; margin-bottom: 5px; background: #000; color: white; border: 1px solid #555; padding: 4px; }
+        button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 4px; }
         
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--main-blue); z-index:500; flex-direction: column; justify-content: center; align-items: center; padding: 50px; cursor: pointer;}
-        #theater-text { font-size: 3.5em; font-weight: bold; }
-        #theater-answer { font-size: 2.5em; color: var(--gold); display: none; margin-top: 20px; border-top: 2px solid #333; padding-top: 20px; }
-        
-        #editor-section { background: #111; padding: 30px; border-top: 4px solid var(--accent); margin-top: 50px; text-align: left; }
-        .setup-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
-        .cat-column { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border: 1px solid #333; }
-        input { padding: 6px; border-radius: 4px; border: 1px solid #444; background: #000; color: white; width: 95%; margin-bottom: 5px; }
-        button { cursor: pointer; padding: 10px 15px; border-radius: 5px; border: none; font-weight: bold; margin: 5px; }
-        #buzzer-alert { background: #e94560; color: white; font-size: 2em; padding: 20px; position: fixed; top: 100px; width: 60%; left: 20%; border-radius: 10px; display: none; z-index: 1000; border: 4px solid white; }
+        #buzzer-alert { background: #e94560; padding: 20px; position: fixed; top: 20px; left: 10%; width: 50%; border-radius: 10px; display: none; z-index: 3000; border: 3px solid white; }
     </style>
 </head>
 <body>
 
-    <div class="room-info-panel">
-        <div id="room-id-display">ROOM: ---</div>
+    <div class="room-panel">
+        <div id="room-display" style="font-weight:bold">ROOM: ---</div>
         <div id="qrcode"></div>
-        <div style="font-size: 10px; margin-top: 5px;">Scan to Join</div>
     </div>
 
-    <div id="buzzer-alert">🔔 <span id="winner">---</span> BUZZED! <button onclick="resetBuzzer()" style="background:white; color:black;">RESET</button></div>
-    
-    <div id="scoreboard-container" style="display:flex; justify-content:center; gap:20px; padding:20px;"></div>
-    <div class="grid" id="main-grid"></div>
+    <div id="buzzer-alert">🔔 <span id="winner">---</span> <button onclick="resetBuzzer()">RESET</button></div>
+    <div id="scoreboard" style="display:flex; justify-content:center; gap:15px; padding:20px;"></div>
+    <div id="main-grid" class="grid"></div>
 
-    <div id="theater" onclick="handleTheaterClick()">
+    <div id="theater" onclick="revealAnswer()">
         <div id="theater-text">CLUE</div>
-        <div id="theater-answer">ANSWER</div>
-        <button onclick="closeTheater(event)" style="position:absolute; bottom:30px; background:#444; color:white;">CLOSE & RETURN</button>
+        <div id="theater-ans">ANSWER</div>
+        <button onclick="closeTheater(event)" style="margin-top:50px; background:#444; color:white;">BACK TO BOARD</button>
     </div>
 
-    <div id="editor-section">
-        <h2 style="color:var(--accent)">Board Setup</h2>
-        <div id="editor-fields" class="setup-row"></div>
-        <button onclick="applyChanges()" style="background:#28a745; color:white; width:100%; padding:20px; margin-top:20px; font-size:1.5em;">BUILD GAME BOARD</button>
+    <div id="setup">
+        <h2>1. Configure Room</h2>
+        <button onclick="exportData()" style="background:#6f42c1; color:white;">💾 SAVE LESSON</button>
+        <button onclick="triggerFileSelect()" style="background:#6f42c1; color:white;">📁 LOAD LESSON</button>
+        <input type="file" id="file-input" style="display:none" onchange="importData(event)">
+        
+        <div id="editor-fields" class="setup-row" style="margin-top:20px;"></div>
+        <button onclick="applyChanges()" style="background:green; color:white; width:100%; padding:20px; margin-top:20px; font-size:1.5em;">2. BUILD GAME</button>
     </div>
 
     <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-            authDomain: "trivia-game-3fe59.firebaseapp.com",
-            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-            projectId: "trivia-game-3fe59",
-            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-
-        let ROOM_ID = prompt("Enter a Room Name (no spaces):", "Class1");
-        if(!ROOM_ID) ROOM_ID = "Room1";
-        ROOM_ID = ROOM_ID.replace(/[^a-zA-Z0-9]/g, "");
-        document.getElementById('room-id-display').innerText = "ROOM: " + ROOM_ID;
-        const roomRef = db.ref('rooms/' + ROOM_ID);
-
-        // Generate QR Code
-        // CHANGE 'your-website.com/play.html' to your actual URL
-        const playUrl = window.location.href.replace('index.html', 'play.html') + "?room=" + ROOM_ID;
-        new QRCode(document.getElementById("qrcode"), {
-            text: playUrl,
-            width: 128,
-            height: 128
-        });
-
-        // RE-USE PREVIOUS LOGIC (Buzzer, Theater, Editor, etc.)
-        roomRef.child('currentBuzz').on('value', (snap) => {
-            const val = snap.val();
-            document.getElementById('buzzer-alert').style.display = val ? 'block' : 'none';
-            if(val) document.getElementById('winner').innerText = val.user.toUpperCase() + " (" + (val.team || "") + ")";
-        });
-        function resetBuzzer() { roomRef.child('currentBuzz').set(null); }
-
-        function openTheater(clue, answer, cell) {
-            document.getElementById('theater-text').innerText = clue;
-            document.getElementById('theater-answer').innerText = answer;
-            document.getElementById('theater-answer').style.display = 'none';
-            document.getElementById('theater').style.display = 'flex';
-            cell.classList.add('used');
-            roomRef.child('currentQuestion').set(clue);
-        }
-        function handleTheaterClick() { document.getElementById('theater-answer').style.display = 'block'; }
-        function closeTheater(e) { e.stopPropagation(); document.getElementById('theater').style.display = 'none'; roomRef.child('currentQuestion').set(null); }
-
-        function buildEditorFields() {
-            const container = document.getElementById('editor-fields');
-            container.innerHTML = "";
-            for(let i=1; i<=3; i++) {
-                let col = document.createElement('div');
-                col.className = "cat-column";
-                col.innerHTML = `<input type="text" placeholder="Category ${i}" id="cname-${i}" style="background:var(--accent); color:black; font-weight:bold;">`;
-                [200, 400, 600, 800, 1000].forEach((v, idx) => {
-                    col.innerHTML += `<input type="text" placeholder="Q $${v}" class="q-in" data-cat="${i}" data-idx="${idx+1}">
-                                      <input type="text" placeholder="A $${v}" class="a-in" data-cat="${i}" data-idx="${idx+1}">`;
-                });
-                container.appendChild(col);
-            }
-        }
-        
-        function applyChanges() {
-            const grid = document.getElementById('main-grid');
-            grid.innerHTML = "";
-            grid.style.gridTemplateColumns = "repeat(3, 1fr)";
-            for(let i=1; i<=3; i++) {
-                const h = document.createElement('div'); h.className = 'category-header';
-                h.innerText = document.getElementById(`cname-${i}`).value || "Category "+i;
-                grid.appendChild(h);
-            }
-            [200, 400, 600, 800, 1000].forEach((v, vIdx) => {
-                for(let i=1; i<=3; i++) {
-                    const q = document.querySelector(`.q-in[data-cat="${i}"][data-idx="${vIdx+1}"]`).value;
-                    const a = document.querySelector(`.a-in[data-cat="${i}"][data-idx="${vIdx+1}"]`).value;
-                    const cell = document.createElement('div');
-                    cell.className = 'cell'; cell.innerText = "$"+v;
-                    cell.onclick = function() { if(!this.classList.contains('used') && q) openTheater(q, a, this); };
-                    grid.appendChild(cell);
-                }
-            });
-            window.scrollTo(0,0);
-        }
-
-        function initTeams() {
-            const container = document.getElementById('scoreboard-container');
-            container.innerHTML = "";
-            for(let i=1; i<=3; i++) {
-                const teamId = 't'+i;
-                const card = document.createElement('div');
-                card.style = "background:var(--dark); border:1px solid var(--accent); padding:10px; border-radius:10px; min-width:120px;";
-                card.innerHTML = `<div style="font-weight:bold;">Team ${i}</div><div style="font-size:2em; color:var(--gold);" id="${teamId}">0</div>
-                    <button onclick="adj('${teamId}', -100)">-</button><button onclick="adj('${teamId}', 100)">+</button>`;
-                container.appendChild(card);
-            }
-            roomRef.child('settings/teamCount').set(3);
-        }
-        function adj(id, amt) { const el = document.getElementById(id); el.innerText = parseInt(el.innerText) + amt; }
-
-        window.onload = () => { initTeams(); buildEditorFields(); };
-    </script>
-</body>
-</html>
-<head>
-    <title>Ultimate Trivia - Master Pro</title>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    <style>
-        :root { --main-blue: #1a1a2e; --accent: #00d2ff; --gold: #ffd700; --dark: #16213e; }
-        body { background: var(--main-blue); color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding-bottom: 50px; }
-        
-        /* The Actual Game Grid */
-        .grid { display: grid; gap: 10px; padding: 20px; max-width: 98%; margin: 0 auto; }
-        .category-header { font-weight: bold; text-transform: uppercase; color: var(--accent); border-bottom: 3px solid var(--accent); padding: 10px; font-size: 1.1em; }
-        .cell { background: var(--dark); border: 2px solid #333; color: var(--gold); font-size: 2em; padding: 25px 0; cursor: pointer; border-radius: 8px; }
-        .cell.used { opacity: 0.1; background: #000; cursor: default; }
-        
-        /* The Question Theater Overlay */
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: var(--main-blue); z-index:500; flex-direction: column; justify-content: center; align-items: center; padding: 50px; box-sizing: border-box; cursor: pointer;}
-        #theater-text { font-size: 3.5em; font-weight: bold; }
-        #theater-answer { font-size: 2.5em; color: var(--gold); display: none; margin-top: 20px; border-top: 2px solid #333; padding-top: 20px; }
-
-        /* The Editor Section (Now always at the bottom) */
-        #editor-section { background: #111; padding: 30px; border-top: 4px solid var(--accent); margin-top: 50px; text-align: left; }
-        .setup-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
-        .cat-column { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border: 1px solid #333; }
-        input { padding: 6px; border-radius: 4px; border: 1px solid #444; background: #000; color: white; width: 95%; margin-bottom: 5px; }
-        .cat-name-in { background: var(--accent); color: black; font-weight: bold; }
-        button { cursor: pointer; padding: 10px 15px; border-radius: 5px; border: none; font-weight: bold; margin: 5px; }
-        
-        #buzzer-alert { background: #e94560; color: white; font-size: 2em; padding: 20px; position: fixed; top: 10px; width: 80%; left: 10%; border-radius: 10px; display: none; z-index: 1000; }
-    </style>
-</head>
-<body>
-
-    <div id="buzzer-alert">🔔 <span id="winner">---</span> BUZZED! <button onclick="resetBuzzer()" style="background:white; color:black;">RESET</button></div>
-    
-    <div id="scoreboard-container" style="display:flex; justify-content:center; gap:20px; padding:20px;"></div>
-    <div class="grid" id="main-grid"></div>
-
-    <div id="theater" onclick="handleTheaterClick()">
-        <div id="theater-text">CLUE</div>
-        <div id="theater-answer">ANSWER</div>
-        <button onclick="closeTheater(event)" style="position:absolute; bottom:30px; background:#444; color:white;">CLOSE & RETURN</button>
-    </div>
-
-    <div id="editor-section">
-        <h2 style="color:var(--accent)">1. Board Setup</h2>
-        <div style="margin-bottom:20px;">
-            Categories: 
-            <select id="cat-num-select" onchange="buildEditorFields()">
-                <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option>
-            </select>
-            | Teams: <input type="number" id="team-count" value="3" min="1" max="6" style="width:40px" onchange="initTeams()">
-            <button onclick="exportData()" style="background:#6f42c1; color:white;">💾 SAVE TO FILE</button>
-            <button onclick="document.getElementById('file-input').click()" style="background:#6f42c1; color:white;">📁 LOAD FROM FILE</button>
-            <input type="file" id="file-input" style="display:none" onchange="importData(event)">
-        </div>
-
-        <div id="editor-fields" class="setup-row"></div>
-
-        <button onclick="applyChanges()" style="background:#28a745; color:white; width:100%; padding:20px; margin-top:20px; font-size:1.5em;">2. BUILD GAME BOARD</button>
-    </div>
-
-    <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-            authDomain: "trivia-game-3fe59.firebaseapp.com",
-            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-            projectId: "trivia-game-3fe59",
-            storageBucket: "trivia-game-3fe59.firebasestorage.app",
-            messagingSenderId: "851139559118",
-            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-
-        // BUZZER SCRIPT
-        db.ref('currentBuzz').on('value', (snap) => {
-            const val = snap.val();
-            document.getElementById('buzzer-alert').style.display = val ? 'block' : 'none';
-            if(val) document.getElementById('winner').innerText = val.user.toUpperCase() + " (" + (val.team || "") + ")";
-        });
-        function resetBuzzer() { db.ref('currentBuzz').set(null); }
-
-        // THEATER SCRIPT
-        let theaterStep = 0;
-        function openTheater(clue, answer, cell) {
-            theaterStep = 1;
-            document.getElementById('theater-text').innerText = clue;
-            document.getElementById('theater-answer').innerText = answer;
-            document.getElementById('theater-answer').style.display = 'none';
-            document.getElementById('theater').style.display = 'flex';
-            cell.classList.add('used');
-            db.ref('currentQuestion').set(clue);
-        }
-        function handleTheaterClick() {
-            if(theaterStep === 1) {
-                document.getElementById('theater-answer').style.display = 'block';
-                theaterStep = 2;
-            }
-        }
-        function closeTheater(e) {
-            e.stopPropagation();
-            document.getElementById('theater').style.display = 'none';
-            db.ref('currentQuestion').set(null);
-        }
-
-        // EDITOR SCRIPT
-        function buildEditorFields() {
-            const num = document.getElementById('cat-num-select').value;
-            const container = document.getElementById('editor-fields');
-            container.innerHTML = "";
-            const vals = [200, 400, 600, 800, 1000];
-            for(let i=1; i<=num; i++) {
-                let col = document.createElement('div');
-                col.className = "cat-column";
-                col.innerHTML = `<input type="text" placeholder="Category ${i}" class="cat-name-in" id="cname-${i}">`;
-                vals.forEach((v, idx) => {
-                    col.innerHTML += `<div style="margin-bottom:8px; border-bottom:1px solid #444;">
-                        <span style="font-size:0.7em; color:var(--accent)">$${v}</span>
-                        <input type="text" placeholder="Q" class="q-in" data-cat="${i}" data-idx="${idx+1}">
-                        <input type="text" placeholder="A" class="a-in" data-cat="${i}" data-idx="${idx+1}">
-                    </div>`;
-                });
-                container.appendChild(col);
-            }
-        }
-
-        function applyChanges() {
-            const num = document.getElementById('cat-num-select').value;
-            const grid = document.getElementById('main-grid');
-            grid.innerHTML = "";
-            grid.style.gridTemplateColumns = `repeat(${num}, 1fr)`;
-            for(let i=1; i<=num; i++) {
-                const h = document.createElement('div');
-                h.className = 'category-header';
-                h.innerText = document.getElementById(`cname-${i}`).value || "Category "+i;
-                grid.appendChild(h);
-            }
-            const vals = [200, 400, 600, 800, 1000];
-            vals.forEach((v, vIdx) => {
-                for(let i=1; i<=num; i++) {
-                    const qInput = document.querySelector(`.q-in[data-cat="${i}"][data-idx="${vIdx+1}"]`);
-                    const aInput = document.querySelector(`.a-in[data-cat="${i}"][data-idx="${vIdx+1}"]`);
-                    const q = qInput ? qInput.value : "";
-                    const a = aInput ? aInput.value : "";
-                    const cell = document.createElement('div');
-                    cell.className = 'cell'; cell.innerText = "$"+v;
-                    cell.onclick = function() { if(!this.classList.contains('used') && q) openTheater(q, a, this); };
-                    grid.appendChild(cell);
-                }
-            });
-            window.scrollTo(0,0); // Scroll up to see the board
-        }
-
-        // TEAMS SCRIPT
-        function initTeams() {
-            const count = document.getElementById('team-count').value;
-            db.ref('settings/teamCount').set(parseInt(count));
-            const container = document.getElementById('scoreboard-container');
-            container.innerHTML = "";
-            for(let i=1; i<=count; i++) {
-                const teamId = 't'+i;
-                const card = document.createElement('div');
-                card.style = "background:var(--dark); border:1px solid var(--accent); padding:10px; border-radius:10px; min-width:120px;";
-                card.innerHTML = `<input type="text" value="Team ${i}" style="background:transparent; border:none; color:white; text-align:center; width:100%; border-bottom:1px solid #444; margin-bottom:5px;">
-                    <div style="font-size:2em; color:var(--gold); font-weight:bold;" id="${teamId}">0</div>
-                    <button onclick="adj('${teamId}', -100)">-</button><button onclick="adj('${teamId}', 100)">+</button>`;
-                container.appendChild(card);
-            }
-        }
-        function adj(id, amt) { const el = document.getElementById(id); el.innerText = parseInt(el.innerText) + amt; }
-
-        // DATA SCRIPT
-        function exportData() {
-            const data = { catCount: document.getElementById('cat-num-select').value, categories: [] };
-            for(let i=1; i<=data.catCount; i++) {
-                let cat = { name: document.getElementById(`cname-${i}`).value, items: [] };
-                for(let j=1; j<=5; j++) {
-                    cat.items.push({
-                        q: document.querySelector(`.q-in[data-cat="${i}"][data-idx="${j}"]`).value,
-                        a: document.querySelector(`.a-in[data-cat="${i}"][data-idx="${j}"]`).value
-                    });
-                }
-                data.categories.push(cat);
-            }
-            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-            a.download = "lesson.json"; a.click();
-        }
-
-        function importData(e) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const d = JSON.parse(ev.target.result);
-                document.getElementById('cat-num-select').value = d.catCount;
-                buildEditorFields();
-                setTimeout(() => {
-                    d.categories.forEach((cat, i) => {
-                        const idx = i + 1;
-                        document.getElementById(`cname-${idx}`).value = cat.name;
-                        cat.items.forEach((item, j) => {
-                            document.querySelector(`.q-in[data-cat="${idx}"][data-idx="${j+1}"]`).value = item.q;
-                            document.querySelector(`.a-in[data-cat="${idx}"][data-idx="${j+1}"]`).value = item.a;
-                        });
-                    });
-                }, 100);
-            };
-            reader.readAsText(e.target.files[0]);
-        }
-
-        window.onload = () => { initTeams(); buildEditorFields(); };
-    </script>
-</body>
-</html>
-
+        const firebaseConfig =
