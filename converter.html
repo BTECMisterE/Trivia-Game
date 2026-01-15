@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trivia Question Converter</title>
+    <style>
+        body { background: #1a1a2e; color: white; font-family: sans-serif; padding: 40px; text-align: center; }
+        textarea { width: 100%; height: 300px; background: #111; color: #00d2ff; padding: 15px; border: 2px solid #444; border-radius: 10px; font-family: monospace; }
+        .container { max-width: 800px; margin: auto; text-align: left; }
+        button { background: #28a745; color: white; border: none; padding: 15px 30px; font-size: 1.2em; border-radius: 5px; cursor: pointer; margin-top: 20px; width: 100%; }
+        .instructions { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9em; }
+        code { color: #ffd700; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Trivia JSON Converter</h1>
+        <div class="instructions">
+            <strong>Instructions:</strong> Paste your questions below. Use this exact format:<br>
+            <code>Category Name</code> (One line)<br>
+            <code>Question | Answer</code> (Five lines per category)<br><br>
+            <em>Example:</em><br>
+            MOVIES<br>
+            Thor's hammer? | Mjolnir<br>
+            2023 Barbie movie? | Barbie<br>
+            ...and so on.
+        </div>
+
+        <textarea id="text-input" placeholder="Paste your text here..."></textarea>
+        
+        <button onclick="convertToJSON()">CONVERT & DOWNLOAD JSON</button>
+    </div>
+
+    <script>
+        function convertToJSON() {
+            const text = document.getElementById('text-input').value.trim();
+            const lines = text.split('\n').filter(l => l.trim() !== "");
+            
+            let data = {
+                catCount: 0,
+                categories: []
+            };
+
+            // Logic: Every 6 lines = 1 Category + 5 Q/A pairs
+            for (let i = 0; i < lines.length; i += 6) {
+                let categoryName = lines[i];
+                let items = [];
+                
+                for (let j = 1; j <= 5; j++) {
+                    let qa = lines[i + j] ? lines[i + j].split('|') : ["", ""];
+                    items.push({
+                        q: qa[0] ? qa[0].trim() : "",
+                        a: qa[1] ? qa[1].trim() : ""
+                    });
+                }
+                
+                data.categories.push({
+                    name: categoryName,
+                    items: items
+                });
+            }
+
+            data.catCount = data.categories.length.toString();
+
+            // Download Logic
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "lesson.json";
+            a.click();
+        }
+    </script>
+</body>
+</html>
