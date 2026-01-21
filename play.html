@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Play - Join Room</title>
+    <title>Student Buzzer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
@@ -13,7 +13,6 @@
     </style>
 </head>
 <body>
-
     <div id="login-sec" class="card">
         <h2>STUDENT JOIN</h2>
         <input type="text" id="p-name" placeholder="Your Name">
@@ -24,7 +23,7 @@
     <div id="game-sec" style="display:none;">
         <h3 id="team-notif">Waiting for Team Assignment...</h3>
         <button id="buzzer" onclick="buzz()">BUZZ!</button>
-        <div id="msg" style="margin-top:10px; color:yellow;"></div>
+        <div id="msg" style="margin-top:10px; color:#00ff00; font-weight:bold;">READY</div>
     </div>
 
     <script>
@@ -32,59 +31,43 @@
         firebase.initializeApp(config);
         const db = firebase.database();
 
-        // Populate Room List
         db.ref('rooms').on('value', s => {
             const drop = document.getElementById('room-list');
             drop.innerHTML = '<option value="">-- Select Room --</option>';
-            s.forEach(room => {
-                if(room.val().metadata && room.val().metadata.status === 'active') {
-                    let o = document.createElement('option'); o.value = room.key; o.innerText = room.key; drop.appendChild(o);
-                }
-            });
+            s.forEach(room => { if(room.val().metadata && room.val().metadata.status === 'active') { let o = document.createElement('option'); o.value = room.key; o.innerText = room.key; drop.appendChild(o); } });
         });
 
         function join() {
             const name = document.getElementById('p-name').value;
             const room = document.getElementById('room-list').value;
             if(!name || !room) return alert("Select your room!");
-
             document.getElementById('login-sec').style.display = 'none';
             document.getElementById('game-sec').style.display = 'block';
-            
             const rRef = db.ref('rooms/' + room);
             const myId = name + "_" + Math.floor(Math.random()*1000);
-            
             rRef.child('players/' + myId).set({ name: name, team: 0 });
             rRef.child('players/' + myId).onDisconnect().remove();
 
-            // Listen for Team
-            rRef.child('players/' + myId + '/team').on('value', s => {
-                const t = s.val();
-                if(t > 0) document.getElementById('team-notif').innerText = "TEAM " + t;
-            });
+            rRef.child('players/' + myId + '/team').on('value', s => { if(s.val() > 0) document.getElementById('team-notif').innerText = "TEAM " + s.val(); });
 
-            // Listen for Buzzer
             rRef.child('currentBuzz').on('value', s => {
                 const b = document.getElementById('buzzer');
+                const msg = document.getElementById('msg');
                 const v = s.val();
-                if(v) {
-                    b.style.opacity = "0.3";
-                    document.getElementById('msg').innerText = v.user + " buzzed!";
+                if (v && v.user) {
+                    b.disabled = true; b.style.opacity = "0.3";
+                    msg.innerText = (v.user === window.myName) ? "YOU BUZZED!" : v.user + " buzzed!";
+                    msg.style.color = "#ff0055";
                 } else {
-                    b.style.opacity = "1";
-                    document.getElementById('msg').innerText = "GO!";
+                    b.disabled = false; b.style.opacity = "1";
+                    msg.innerText = "READY TO BUZZ!"; msg.style.color = "#00ff00";
                 }
             });
-
             window.myRRef = rRef; window.myName = name;
             document.getElementById('buzzer').style.display = 'block';
         }
 
-        function buzz() {
-            window.myRRef.child('currentBuzz').transaction(c => {
-                return c === null ? { user: window.myName } : undefined;
-            });
-        }
+        function buzz() { window.myRRef.child('currentBuzz').transaction(c => { return c === null ? { user: window.myName } : undefined; }); }
     </script>
 </body>
 </html>
