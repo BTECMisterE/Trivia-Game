@@ -1,145 +1,68 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Trivia Master - Ultimate Pro</title>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
-        .box { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; margin-bottom: 20px; }
-        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin: 20px 0; }
-        .cat-h { color: #00d2ff; font-weight: bold; border-bottom: 2px solid #00d2ff; padding: 5px; text-transform: uppercase; font-size: 0.9em; }
-        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; transition: 0.2s; }
-        .cell.used { opacity: 0.15; }
-        
-        /* QR and Join Info */
-        .join-card { display: flex; align-items: center; justify-content: space-around; background: #fff; color: #000; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
-        #qr-code { width: 120px; height: 120px; border: 2px solid #000; }
-        
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:1000; flex-direction: column; justify-content: center; align-items: center; }
-        .scoring-panel { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 15px; margin-top: 20px; width: 85%; max-width: 600px; }
-        .team-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #444; }
-        
-        button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; }
-        .btn-blue { background: #00d2ff; color: black; }
-        .btn-purple { background: #6f42c1; color: white; }
-        .btn-green { background: #28a745; color: white; }
-        .btn-red { background: #e94560; color: white; }
-        #buzzer-ui { background: #e94560; padding: 15px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 2000; border: 2px solid white; }
-    </style>
-</head>
-<body>
+<audio id="bg-music" loop>
+    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+</audio>
 
-    <div id="buzzer-ui">🔔 <span id="b-user">---</span> <button onclick="resetBuzzer()" style="margin-left:10px;">RESET</button></div>
-
-    <div class="box">
-        <strong>1. SESSION SETUP</strong><br><br>
-        Room Name: <input type="text" id="r-name" value="Class1" style="width:120px; padding:5px;">
-        Teams: <input type="number" id="t-count" value="3" style="width:40px; padding:5px;">
-        <button class="btn-blue" onclick="connectCloud()">CONNECT & GENERATE QR</button>
-        <button class="btn-red" onclick="resetScores()">RESET SCORES</button>
+<div id="step3" class="step-layer">
+    <div style="margin-bottom: 10px;">
+        <button onclick="toggleMusic()" id="music-btn" style="background:#555; color:white;">🎵 Music: ON</button>
+        <button class="btn-purple" onclick="showStep(2)">← Adjust Teams</button>
     </div>
-
-    <div id="join-info" class="join-card" style="display:none;">
-        <div>
-            <h2 style="margin:0;">JOIN THE GAME</h2>
-            <p style="font-size:1.2em;">Scan the QR or visit your play.html link</p>
-            <p><strong>Room Code: <span id="display-room">---</span></strong></p>
-        </div>
-        <img id="qr-code" src="" alt="QR Join Link">
-    </div>
-
-    <div id="roster-box" class="box" style="display:none;">
-        <strong>2. TEAM BALANCING</strong>
-        <button class="btn-purple" onclick="shuffleTeams()" style="margin-left:15px;">🎲 RANDOMIZE & BALANCE TEAMS</button>
-        <div id="player-list" style="display:flex; justify-content:center; gap:15px; margin-top:15px; flex-wrap:wrap;"></div>
-    </div>
-
     <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom:20px;"></div>
     <div id="main-grid" class="grid"></div>
+</div>
 
-    <script>
-        // Existing Firebase setup
-        const config = { /* Your Config Here */ };
-        if (!firebase.apps.length) firebase.initializeApp(config);
-        const db = firebase.database();
-        let rRef, teamMax;
+<script>
+    // ... Existing Firebase/Connection Code ...
 
-        function connectCloud() {
-            const room = document.getElementById('r-name').value;
-            teamMax = document.getElementById('t-count').value;
-            rRef = db.ref('rooms/' + room);
-            
-            // 1. Show Join Info & QR
-            document.getElementById('display-room').innerText = room;
-            document.getElementById('join-info').style.display = 'flex';
-            document.getElementById('roster-box').style.display = 'block';
-            
-            // Generate QR linking to your play.html
-            // IMPORTANT: Change 'play.html' to your actual web address if hosted
-            const playLink = window.location.href.replace('index.html', 'play.html') + "?room=" + room;
-            const qrUrl = `https://chart.googleapis.com/chart?chs=150x150&cht=qr&chl=${encodeURIComponent(playLink)}&choe=UTF-8`;
-            document.getElementById('qr-code').src = qrUrl;
+    const music = document.getElementById('bg-music');
+    let musicPlaying = false;
 
-            // 2. Scoreboard and Roster Listeners
-            setupListeners();
-            alert("Connected! Students can now scan the QR code.");
-        }
-
-        function setupListeners() {
-            // Monitor Scores
-            const sArea = document.getElementById('score-area'); sArea.innerHTML = "";
-            for(let i=1; i<=teamMax; i++) {
-                let d = document.createElement('div'); d.style = "background:#16213e; padding:10px; border:1px solid #ffd700; border-radius:8px; min-width:80px;";
-                d.innerHTML = `Team ${i}<br><span id="ts-${i}" style="font-size:1.5em;color:#ffd700;">0</span>`;
-                sArea.appendChild(d);
-                rRef.child('scores/team'+i).on('value', s => { document.getElementById('ts-'+i).innerText = s.val() || 0; });
-            }
-
-            // Monitor Player Roster
-            rRef.child('players').on('value', s => {
-                const players = s.val();
-                const listArea = document.getElementById('player-list');
-                listArea.innerHTML = "";
-                if(!players) return;
-
-                let teams = {};
-                for(let id in players) {
-                    let p = players[id];
-                    if(!teams[p.team]) teams[p.team] = [];
-                    teams[p.team].push(p.name);
-                }
-
-                for(let i=1; i<=teamMax; i++) {
-                    let count = teams[i] ? teams[i].length : 0;
-                    listArea.innerHTML += `<div style="background:#222; padding:8px; border-radius:5px; border:1px solid #00d2ff; min-width:100px;">
-                        <strong>Team ${i}</strong><br><span style="color:#ffd700;">${count} Players</span></div>`;
-                }
-            });
-        }
-
-        function shuffleTeams() {
-            rRef.child('players').once('value', s => {
-                const players = s.val();
-                if(!players) return alert("No players have joined yet!");
-                
-                let pIds = Object.keys(players);
-                // Shuffle Array
-                for (let i = pIds.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [pIds[i], pIds[j]] = [pIds[j], pIds[i]];
-                }
-
-                // Balance into teams
-                pIds.forEach((id, index) => {
-                    let assignedTeam = (index % teamMax) + 1;
-                    rRef.child('players/' + id + '/team').set(assignedTeam);
-                });
-                alert("Teams balanced!");
-            });
-        }
+    // Triggered when you transition to Step 3
+    function showStep(n) {
+        document.querySelectorAll('.step-layer').forEach(l => l.classList.remove('active'));
+        document.getElementById('step' + n).classList.add('active');
         
-        // ... (Keep the rest of your buildBoard, saveGame, loadGame, and Theater functions) ...
-    </script>
-</body>
-</html>
+        if(n === 3) {
+            buildBoard();
+            playMusic();
+        } else {
+            stopMusic();
+        }
+    }
+
+    function playMusic() {
+        music.volume = 0.2; // Keep it low so you can talk over it
+        music.play().catch(e => console.log("Audio requires user interaction first."));
+        musicPlaying = true;
+        document.getElementById('music-btn').innerText = "🎵 Music: ON";
+    }
+
+    function toggleMusic() {
+        if (musicPlaying) {
+            music.pause();
+            document.getElementById('music-btn').innerText = "🔇 Music: OFF";
+        } else {
+            music.play();
+            document.getElementById('music-btn').innerText = "🎵 Music: ON";
+        }
+        musicPlaying = !musicPlaying;
+    }
+
+    function stopMusic() {
+        music.pause();
+        music.currentTime = 0;
+        musicPlaying = false;
+    }
+
+    // Optional: Lower music when a question is opened
+    function launch(q, a, v, cell, idx) {
+        music.volume = 0.05; // Drop the volume to a whisper during the question
+        // ... rest of your existing launch logic ...
+    }
+
+    function closeTheater() {
+        music.volume = 0.2; // Bring music back up when returning to the board
+        document.getElementById('theater').style.display = 'none';
+        resetBuzzer();
+    }
+</script>
