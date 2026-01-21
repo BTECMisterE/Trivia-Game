@@ -12,11 +12,11 @@
         .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
         
         .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; text-align: left; }
-        .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
+        .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px; min-height: 180px; }
         
-        /* High Visibility Inputs */
+        /* Inputs */
         input { width: 92%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; }
-        select { width: 100%; padding: 8px; margin: 5px 0; border-radius: 4px; }
+        select { width: 100%; padding: 8px; margin: 5px 0; border-radius: 4px; background: white; color: black; font-weight: bold; border: 2px solid #00d2ff; }
         
         /* Buttons */
         button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
@@ -50,9 +50,12 @@
 
     <div class="sidebar">
         <div class="qr-box">
-            <img id="qr-img" style="width: 150px; height: 150px;" alt="QR Loading...">
+            <img id="qr-img" style="width: 150px; height: 150px;" alt="QR will appear here">
             <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN</div>
-            <div style="font-size: 11px; margin-top:5px;"><a id="qr-link" href="#" target="_blank" style="color:blue;">Or Click Here</a></div>
+            <div style="font-size: 11px; margin-top:5px;">
+                <a id="qr-link" href="#" target="_blank" style="color:blue;">Or Click Here</a>
+                <br><span style="cursor:pointer; color:#555; text-decoration:underline;" onclick="forceGenQR()">Retry QR</span>
+            </div>
         </div>
 
         <div id="buzzer-ui">
@@ -66,7 +69,7 @@
             <input type="text" id="r-name" value="Class1">
 
             <div style="margin-top:10px; margin-bottom:5px; color:#ccc; font-size:12px;">How many Teams?</div>
-            <select id="t-count" style="background: white; color: black; font-weight: bold; border: 2px solid #00d2ff;">
+            <select id="t-count">
                 <option value="2">2 Teams</option>
                 <option value="3" selected>3 Teams</option>
                 <option value="4">4 Teams</option>
@@ -120,16 +123,22 @@
         const db = firebase.database();
         let rRef, teamMax = 3, gameData = null, musicPlaying = false;
 
-        window.onload = function() {
+        // Try to generate QR immediately on load
+        window.addEventListener('load', forceGenQR);
+
+        function forceGenQR() {
             const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + "/play.html";
             document.getElementById('qr-link').href = baseUrl;
-            document.getElementById('qr-link').innerText = baseUrl;
+            document.getElementById('qr-link').innerText = "Click to open Student Link";
+            // Using QRServer as it's more reliable than Google Charts for local files
             document.getElementById('qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(baseUrl)}`;
-        };
+        }
 
         function connectRoom() {
+            // Force QR Gen just in case
+            forceGenQR();
+            
             const room = document.getElementById('r-name').value;
-            // READ THE NEW DROPDOWN
             teamMax = parseInt(document.getElementById('t-count').value) || 3;
 
             rRef = db.ref('rooms/' + room);
@@ -147,4 +156,47 @@
             if(!name || name.includes("Scanning")) return alert("Select a lesson.");
             db.ref('library/' + name).once('value', s => {
                 gameData = s.val();
-                document.getElementById
+                document.getElementById('welcome').style.display = 'none';
+                buildBoard();
+            });
+        }
+
+        function buildBoard() {
+            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
+            gameData.categories.forEach(cat => {
+                let h = document.createElement('div'); h.style.color="#00d2ff"; h.style.fontWeight="bold"; h.innerText = cat.name; grid.appendChild(h);
+            });
+            for(let r=0; r<5; r++) {
+                gameData.categories.forEach(cat => {
+                    const item = cat.items[r];
+                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+(200*(r+1));
+                    cell.onclick = () => {
+                        document.getElementById('q-box').innerText = item.q;
+                        document.getElementById('a-box').innerText = item.a;
+                        document.getElementById('theater').style.display = 'flex';
+                        document.getElementById('a-box').style.display = 'none';
+                        document.getElementById('rev-btn').style.display = 'block';
+                        document.getElementById('score-ctrls').style.display = 'none';
+                        if(musicPlaying) document.getElementById('bg-music').volume = 0.05;
+                        cell.classList.add('used');
+                    };
+                    grid.appendChild(cell);
+                });
+            }
+        }
+
+        function reveal() {
+            document.getElementById('a-box').style.display = 'block';
+            document.getElementById('rev-btn').style.display = 'none';
+            document.getElementById('score-ctrls').style.display = 'block';
+            const area = document.getElementById('team-btns'); area.innerHTML = "";
+            for(let i=1; i<=teamMax; i++) {
+                area.innerHTML += `<div style="background:#333; padding:5px; border-radius:5px; margin:2px;">
+                    Team ${i} <button onclick="addScore(${i}, 200)" style="background:green; color:white; width:30px;">+</button>
+                </div>`;
+            }
+        }
+
+        function addScore(t, amt) {
+            const el = document.getElementById('ts-'+t);
+            rRef.child('scores/team'+t).set(parseInt(el.innerText) + amt);
