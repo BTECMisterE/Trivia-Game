@@ -1,68 +1,81 @@
-<audio id="bg-music" loop>
-    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
-</audio>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trivia Master - 3-Step Flow</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        .box { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; margin-bottom: 20px; }
+        .step-layer { display: none; }
+        .active { display: block; }
+        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin: 20px 0; }
+        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
+        .cell.used { opacity: 0.15; }
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
+        .join-card { display: flex; align-items: center; justify-content: space-around; background: #fff; color: #000; padding: 15px; border-radius: 10px; margin: 20px 0; }
+        #qr-img { width: 150px; height: 150px; border: 1px solid #000; }
+        button { cursor: pointer; padding: 12px 20px; font-weight: bold; border: none; border-radius: 5px; margin: 5px; }
+        .btn-blue { background: #00d2ff; color: black; }
+        .btn-next { background: #28a745; color: white; width: 80%; margin-top: 20px; font-size: 1.2em; }
+        #buzzer-ui { background: #e94560; padding: 15px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 3000; border: 2px solid white; }
+    </style>
+</head>
+<body>
 
-<div id="step3" class="step-layer">
-    <div style="margin-bottom: 10px;">
-        <button onclick="toggleMusic()" id="music-btn" style="background:#555; color:white;">🎵 Music: ON</button>
-        <button class="btn-purple" onclick="showStep(2)">← Adjust Teams</button>
-    </div>
-    <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom:20px;"></div>
-    <div id="main-grid" class="grid"></div>
-</div>
+    <audio id="bg-music" loop><source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg"></audio>
+    <div id="buzzer-ui">🔔 <span id="b-user">---</span> <button onclick="resetBuzzer()">RESET</button></div>
 
-<script>
-    // ... Existing Firebase/Connection Code ...
-
-    const music = document.getElementById('bg-music');
-    let musicPlaying = false;
-
-    // Triggered when you transition to Step 3
-    function showStep(n) {
-        document.querySelectorAll('.step-layer').forEach(l => l.classList.remove('active'));
-        document.getElementById('step' + n).classList.add('active');
+    <div id="step1" class="box step-layer active">
+        <h2>STEP 1: Load Lesson & Room</h2>
+        Room Name: <input type="text" id="r-name" value="Class1" style="padding:10px; width:120px;">
+        <button class="btn-blue" onclick="connectAndInit()">1. CONNECT ROOM</button>
+        <p id="connect-status" style="color:#0f0;"></p>
         
-        if(n === 3) {
-            buildBoard();
-            playMusic();
-        } else {
-            stopMusic();
-        }
-    }
+        <hr style="border:0; border-top:1px solid #333; margin:20px 0;">
+        
+        <select id="library-dropdown" style="padding:10px; width:200px;"><option value="">-- Scanning Cloud... --</option></select>
+        <button class="btn-blue" onclick="loadSelectedLesson()">2. LOAD QUESTIONS</button>
+        <p id="load-status" style="color:yellow;"></p>
+        
+        <button id="to-step2" class="btn-next" style="display:none;" onclick="showStep(2)">NEXT: Randomize Students →</button>
+    </div>
 
-    function playMusic() {
-        music.volume = 0.2; // Keep it low so you can talk over it
-        music.play().catch(e => console.log("Audio requires user interaction first."));
-        musicPlaying = true;
-        document.getElementById('music-btn').innerText = "🎵 Music: ON";
-    }
+    <div id="step2" class="box step-layer">
+        <h2>STEP 2: Student Roster</h2>
+        <div class="join-card">
+            <div><h3>SCAN TO JOIN</h3><p>Room: <strong id="display-room">---</strong></p></div>
+            <img id="qr-img" src="" alt="QR Code">
+        </div>
+        <button class="btn-blue" onclick="shuffleTeams()">🎲 SHUFFLE & BALANCE TEAMS</button>
+        <div id="player-roster" style="display:flex; justify-content:center; gap:15px; margin-top:15px;"></div>
+        <button class="btn-next" onclick="showStep(3)">NEXT: Start Game Board →</button>
+    </div>
 
-    function toggleMusic() {
-        if (musicPlaying) {
-            music.pause();
-            document.getElementById('music-btn').innerText = "🔇 Music: OFF";
-        } else {
-            music.play();
-            document.getElementById('music-btn').innerText = "🎵 Music: ON";
-        }
-        musicPlaying = !musicPlaying;
-    }
+    <div id="step3" class="step-layer">
+        <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom:20px;"></div>
+        <div id="main-grid" class="grid"></div>
+        <button onclick="toggleMusic()">🎵 Toggle Music</button>
+    </div>
 
-    function stopMusic() {
-        music.pause();
-        music.currentTime = 0;
-        musicPlaying = false;
-    }
+    <div id="theater">
+        <div id="q-box" style="font-size:2.5em; padding:20px;"></div>
+        <button id="rev-btn" onclick="revealAnswer()" class="btn-blue">SHOW ANSWER</button>
+        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
+        <div id="score-ctrls" style="display:none;">
+            <div id="team-scoring-list"></div>
+            <button onclick="closeTheater()" style="margin-top:20px; background:#444; color:white;">BACK TO BOARD</button>
+        </div>
+    </div>
 
-    // Optional: Lower music when a question is opened
-    function launch(q, a, v, cell, idx) {
-        music.volume = 0.05; // Drop the volume to a whisper during the question
-        // ... rest of your existing launch logic ...
-    }
-
-    function closeTheater() {
-        music.volume = 0.2; // Bring music back up when returning to the board
-        document.getElementById('theater').style.display = 'none';
-        resetBuzzer();
-    }
-</script>
+    <script>
+        const config = {
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
+        firebase.initializeApp(config);
+        const db = firebase.database();
+        let rRef, teamMax = 3, gameData = null, musicPlaying = false;
