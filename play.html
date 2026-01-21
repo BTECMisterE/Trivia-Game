@@ -1,168 +1,86 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Play - Debug Mode</title>
+    <title>Student Buzzer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
         .card { background: #111; padding: 20px; border-radius: 15px; border: 2px solid #00d2ff; max-width: 400px; margin: 0 auto; }
-        
-        /* Debug Console Box */
-        #console-log {
-            width: 100%; height: 100px; background: #000; color: #0f0; 
-            font-family: monospace; font-size: 12px; text-align: left; 
-            padding: 10px; border: 1px solid #555; overflow-y: scroll;
-            margin-bottom: 20px; display: block;
-        }
-
         input, select { width: 90%; padding: 12px; margin: 10px 0; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 16px; }
         button { cursor: pointer; padding: 15px; width: 95%; border-radius: 8px; font-weight: bold; border: none; font-size: 1.1em; margin-top: 10px; }
         .btn-green { background: #28a745; color: white; }
         .btn-gray { background: #444; color: white; }
-        
-        #buzzer { 
-            width: 250px; height: 250px; background: radial-gradient(#ff0055, #80002b);
-            border-radius: 50%; border: 8px solid white; color: white; font-size: 3em;
-            font-weight: bold; cursor: pointer; margin: 40px auto; display: none;
-        }
+        #buzzer { width: 250px; height: 250px; background: radial-gradient(#ff0055, #80002b); border-radius: 50%; border: 8px solid white; color: white; font-size: 3em; font-weight: bold; cursor: pointer; margin: 40px auto; display: none; }
         #buzzer:disabled { background: #444; opacity: 0.5; }
     </style>
 </head>
 <body>
 
-    <div id="console-log">System initializing...</div>
-
     <div id="join-sec" class="card">
-        <h2>STUDENT JOIN</h2>
+        <h2>STUDENT LOGIN</h2>
         <input type="text" id="p-name" placeholder="Enter Name">
-        <select id="room-list"><option value="">-- Initializing... --</option></select>
-        <button id="btn-refresh" class="btn-gray">🔄 Force Refresh List</button>
-        <button id="btn-join" class="btn-green">JOIN GAME</button>
+        <select id="room-list"><option value="">Scanning...</option></select>
+        <button onclick="scanRooms()" class="btn-gray">🔄 Refresh List</button>
+        <button onclick="joinGame()" class="btn-green">JOIN GAME</button>
     </div>
 
     <div id="play-sec" style="display:none;">
-        <h3><span id="t-display">Waiting for Team...</span></h3>
+        <h3><span id="t-display" style="color:#00d2ff;">Assigning Team...</span></h3>
         <button id="buzzer" onclick="buzz()">BUZZ!</button>
-        <div id="msg-box" style="color:yellow; margin-top:10px;"></div>
+        <div id="msg-box" style="color:yellow; font-size:1.2em; margin-top:10px;"></div>
     </div>
 
     <script>
-        // --- 1. OVERRIDE CONSOLE LOGGING ---
-        function log(msg, type='info') {
-            const box = document.getElementById('console-log');
-            const color = type === 'error' ? 'red' : '#0f0';
-            box.innerHTML = `<div style="color:${color}; border-bottom:1px solid #333;">> ${msg}</div>` + box.innerHTML;
-        }
-        
-        window.onerror = function(message, source, lineno, colno, error) {
-            log(`CRITICAL ERROR: ${message}`, 'error');
-        };
+        const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
+        firebase.initializeApp(config);
+        const db = firebase.database();
+        let rRef, myId;
 
-        // --- 2. STARTUP SEQUENCE ---
-        let db, rRef;
-        const config = {
-            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-            authDomain: "trivia-game-3fe59.firebaseapp.com",
-            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-            projectId: "trivia-game-3fe59",
-            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
-        };
-
-        document.addEventListener('DOMContentLoaded', () => {
-            log("DOM Loaded. Checking Firebase...");
-            
-            if (typeof firebase === 'undefined') {
-                log("ERROR: Firebase libraries failed to load! Check internet connection or ad-blockers.", 'error');
-                return;
-            }
-
-            try {
-                firebase.initializeApp(config);
-                db = firebase.database();
-                log("Firebase Connected. Scanning rooms...");
-                scanRooms();
-                
-                // Attach Button Listeners manually to ensure they work
-                document.getElementById('btn-refresh').addEventListener('click', scanRooms);
-                document.getElementById('btn-join').addEventListener('click', joinGame);
-                
-            } catch(e) {
-                log(`Init Error: ${e.message}`, 'error');
-            }
-        });
+        window.onload = scanRooms;
 
         function scanRooms() {
-            log("Scanning for active rooms...");
             const drop = document.getElementById('room-list');
-            drop.innerHTML = '<option>Scanning...</option>';
-            
+            drop.innerHTML = '<option value="">Scanning...</option>';
             db.ref('rooms').once('value', s => {
                 drop.innerHTML = '<option value="">-- Select Room --</option>';
-                let count = 0;
                 s.forEach(child => {
                     const d = child.val();
-                    // We check if metadata exists
                     if(d.metadata && d.metadata.status === 'active') {
-                        let opt = document.createElement('option');
-                        opt.value = child.key; opt.innerText = child.key;
-                        drop.appendChild(opt);
-                        count++;
+                        let opt = document.createElement('option'); opt.value = child.key; opt.innerText = child.key; drop.appendChild(opt);
                     }
                 });
-                if(count === 0) {
-                    log("Scan complete. No active rooms found.");
-                    drop.innerHTML = '<option>No Active Rooms</option>';
-                } else {
-                    log(`Scan complete. Found ${count} rooms.`);
-                }
-            }, err => {
-                log(`Database Permission Error: ${err.message}`, 'error');
             });
         }
 
         function joinGame() {
             const name = document.getElementById('p-name').value;
             const room = document.getElementById('room-list').value;
+            if(!name || !room) return alert("Enter name and room.");
             
-            if(!name || !room || room.includes("Select") || room.includes("No Active")) {
-                log("Error: Invalid Name or Room selected.", 'error');
-                return alert("Check name and room!");
-            }
-
-            log(`Joining ${room} as ${name}...`);
             document.getElementById('join-sec').style.display = 'none';
             document.getElementById('play-sec').style.display = 'block';
             
             rRef = db.ref('rooms/' + room);
-            const myId = name + "_" + Math.floor(Math.random()*1000);
-            
-            rRef.child('players/' + myId).set({ name: name, team: 0 })
-                .then(() => log("Player registered in DB."))
-                .catch(e => log(`Save Error: ${e.message}`, 'error'));
-            
+            myId = name + "_" + Math.floor(Math.random() * 1000);
+            rRef.child('players/' + myId).set({ name: name, team: 0 });
             rRef.child('players/' + myId).onDisconnect().remove();
 
-            // Listen for Team
             rRef.child('players/' + myId + '/team').on('value', s => {
                 const t = s.val();
                 document.getElementById('t-display').innerText = (t && t > 0) ? "TEAM " + t : "Wait for Shuffle...";
-                log(`Team update: ${t}`);
             });
 
-            // Listen for Buzzer
             rRef.child('currentBuzz').on('value', s => {
-                const btn = document.getElementById('buzzer');
                 const v = s.val();
+                const b = document.getElementById('buzzer');
                 if(v) {
-                    btn.disabled = true;
-                    btn.style.background = "#444";
+                    b.disabled = true;
                     document.getElementById('msg-box').innerText = (v.user === name) ? "YOU BUZZED!" : v.user + " buzzed!";
                 } else {
-                    btn.disabled = false;
-                    btn.style.background = "radial-gradient(#ff0055, #80002b)";
-                    document.getElementById('msg-box').innerText = "";
+                    b.disabled = false;
+                    document.getElementById('msg-box').innerText = "GO!";
                 }
             });
             document.getElementById('buzzer').style.display = 'block';
@@ -170,12 +88,7 @@
 
         function buzz() {
             const name = document.getElementById('p-name').value;
-            const tTxt = document.getElementById('t-display').innerText;
-            if(tTxt.includes("Wait")) return alert("Wait for team assignment!");
-            
-            rRef.child('currentBuzz').transaction(curr => {
-                return (curr === null) ? { user: name, team: tTxt } : undefined;
-            });
+            rRef.child('currentBuzz').transaction(c => { return (c === null) ? { user: name } : undefined; });
         }
     </script>
 </body>
