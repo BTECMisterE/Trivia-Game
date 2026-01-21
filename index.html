@@ -1,65 +1,56 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Guaranteed Connection</title>
+    <title>Trivia Master - Final Fix</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
         .box { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; margin-bottom: 20px; }
-        #debug-box { background: #000; color: #0f0; padding: 10px; font-family: monospace; font-size: 12px; text-align: left; height: 60px; overflow-y: auto; border: 1px solid #333; margin-top: 10px; }
-        
+        #status-bar { background: #000; color: #0f0; padding: 10px; margin: 10px 0; border: 1px solid #333; font-family: monospace; }
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin: 20px 0; }
-        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
+        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; }
         .cell.used { opacity: 0.15; }
-        
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:1000; flex-direction: column; justify-content: center; align-items: center; }
-        .scoring-panel { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; margin-top: 20px; width: 80%; }
-        .team-row { display: flex; justify-content: space-between; margin: 10px 0; border-bottom: 1px solid #333; padding-bottom: 5px; }
-        
+        .score-row { display: flex; justify-content: space-between; width: 300px; padding: 10px; border-bottom: 1px solid #333; }
+        input { padding: 8px; background: #000; color: #fff; border: 1px solid #444; }
         button { cursor: pointer; padding: 10px; font-weight: bold; border-radius: 5px; border: none; }
-        .btn-blue { background: #00d2ff; color: #000; }
-        .btn-green { background: #28a745; color: white; }
-        .btn-red { background: #dc3545; color: white; }
     </style>
 </head>
 <body>
 
     <div class="box">
         <h3>1. SYSTEM CONNECTION</h3>
-        Room: <input type="text" id="r-name" value="Class1" style="padding:5px;">
-        Teams: <input type="number" id="t-count" value="3" style="width:40px; padding:5px;">
-        <button class="btn-blue" onclick="manualConnect()">CONNECT TO ROOM</button>
-        <div id="debug-box">System Status: Waiting for user...</div>
+        Room: <input type="text" id="r-name" value="Class1">
+        Teams: <input type="number" id="t-count" value="3" style="width:50px;">
+        <button onclick="doConnect()" style="background:#00d2ff; color:#000;">CONNECT NOW</button>
+        <div id="status-bar">System Status: Ready. Please click Connect.</div>
     </div>
 
-    <div id="score-area" style="display:flex; justify-content:center; gap:15px; margin-bottom:20px;"></div>
+    <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom:20px;"></div>
     <div id="main-grid" class="grid"></div>
 
     <div id="theater">
-        <div id="q-txt" style="font-size:2.5em; padding:20px;"></div>
-        <button id="show-ans-btn" class="btn-blue" onclick="reveal()">SHOW ANSWER</button>
-        <div id="a-txt" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
+        <div id="q-text" style="font-size:2.5em; padding:20px;"></div>
+        <button id="ans-btn" onclick="doReveal()" style="background:#00d2ff; padding:15px;">SHOW ANSWER</button>
+        <div id="a-text" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
         
-        <div id="scoring-section" style="display:none;" class="scoring-panel">
-            <h4>AWARD POINTS ($<span id="points-val">0</span>)</h4>
-            <div id="team-buttons"></div>
-            <button onclick="closeTheater()" style="margin-top:20px; background:#444; color:white;">BACK TO BOARD</button>
+        <div id="score-ctrls" style="display:none; background:rgba(255,255,255,0.1); padding:20px; border-radius:10px;">
+            <h4>AWARD POINTS</h4>
+            <div id="team-list"></div>
+            <button onclick="doClose()" style="margin-top:20px; background:#444; color:white;">CLOSE</button>
         </div>
     </div>
 
     <div id="ed-sec" class="box">
-        <button onclick="quickSample()">LOAD SAMPLES</button>
-        <div id="editor-container" style="display:grid; grid-template-columns: repeat(6,1fr); gap:5px; margin-top:10px;"></div>
-        <button class="btn-green" onclick="buildBoard()" style="width:100%; margin-top:15px; padding:15px;">BUILD GAME BOARD</button>
+        <div id="ed-grid" style="display:grid; grid-template-columns: repeat(6,1fr); gap:5px;"></div>
+        <button onclick="doBuild()" style="background:#28a745; color:white; width:100%; margin-top:15px; padding:15px; font-size:1.2em;">BUILD GAME BOARD</button>
     </div>
 
     <script>
-        // Log helper
-        function report(msg) {
-            const dbg = document.getElementById('debug-box');
-            dbg.innerHTML = "> " + msg + "<br>" + dbg.innerHTML;
-        }
+        var rRef = null;
+        var activeVal = 0;
+        var teamMax = 3;
 
         const config = {
             apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
@@ -69,23 +60,94 @@
             appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
         };
 
-        let rRef = null;
-        let activeVal = 0;
-        let numTeams = 3;
-
-        function manualConnect() {
-            report("Attempting to connect...");
+        function doConnect() {
+            document.getElementById('status-bar').innerText = "Connecting...";
             try {
-                if (!firebase.apps.length) firebase.initializeApp(config);
-                const db = firebase.database();
-                const room = document.getElementById('r-name').value;
-                numTeams = document.getElementById('t-count').value;
+                if (!firebase.apps.length) { firebase.initializeApp(config); }
+                var database = firebase.database();
+                var room = document.getElementById('r-name').value;
+                teamMax = document.getElementById('t-count').value;
+                rRef = database.ref('rooms/' + room);
                 
-                rRef = db.ref('rooms/' + room);
-                
-                // Setup Scoreboard
-                const area = document.getElementById('score-area'); area.innerHTML = "";
-                for(let i=1; i<=numTeams; i++) {
-                    let d = document.createElement('div');
+                var sArea = document.getElementById('score-area'); 
+                sArea.innerHTML = "";
+                for(var i=1; i<=teamMax; i++) {
+                    var d = document.createElement('div');
                     d.style = "background:#16213e; padding:10px; border:1px solid #ffd700; border-radius:5px; min-width:80px;";
-                    d.innerHTML = `Team ${i}<br><span id="
+                    d.innerHTML = "Team "+i+"<br><span id='score-"+i+"' style='font-size:1.5em;color:#ffd700;'>0</span>";
+                    sArea.appendChild(d);
+                    
+                    (function(n) {
+                        rRef.child('scores/team'+n).on('value', function(s) {
+                            document.getElementById('score-'+n).innerText = s.val() || 0;
+                        });
+                    })(i);
+                }
+                document.getElementById('status-bar').innerText = "CONNECTED TO: " + room;
+                alert("Connected!");
+            } catch(e) {
+                document.getElementById('status-bar').innerText = "ERROR: " + e.message;
+            }
+        }
+
+        function doReveal() {
+            document.getElementById('a-text').style.display = 'block';
+            document.getElementById('ans-btn').style.display = 'none';
+            var list = document.getElementById('team-list');
+            list.innerHTML = "";
+            for(var i=1; i<=teamMax; i++) {
+                list.innerHTML += "<div class='score-row'><span>Team "+i+"</span><div>" +
+                    "<button onclick='chgScore("+i+","+activeVal+")' style='background:green; color:white;'>+</button> " +
+                    "<button onclick='chgScore("+i+",-"+activeVal+")' style='background:red; color:white;'>-</button></div></div>";
+            }
+            document.getElementById('score-ctrls').style.display = 'block';
+        }
+
+        function chgScore(t, a) {
+            var cur = parseInt(document.getElementById('score-'+t).innerText);
+            rRef.child('scores/team'+t).set(cur + a);
+        }
+
+        function doClose() {
+            document.getElementById('theater').style.display = 'none';
+            document.getElementById('a-text').style.display = 'none';
+            document.getElementById('score-ctrls').style.display = 'none';
+        }
+
+        function doBuild() {
+            var grid = document.getElementById('main-grid');
+            grid.innerHTML = "";
+            var vals = [200,400,600,800,1000];
+            for(var c=1; c<=6; c++) {
+                var h = document.createElement('div'); h.innerHTML = "<b>CAT "+c+"</b>"; grid.appendChild(h);
+            }
+            vals.forEach(function(v) {
+                for(var c=1; c<=6; c++) {
+                    var q = document.querySelector(".qi[data-c='"+c+"'][data-v='"+v+"']").value;
+                    var a = document.querySelector(".ai[data-c='"+c+"'][data-v='"+v+"']").value;
+                    var cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.innerText = "$" + v;
+                    (function(question, answer, value, element) {
+                        element.onclick = function() {
+                            if(question) {
+                                activeVal = value;
+                                document.getElementById('q-text').innerText = question;
+                                document.getElementById('a-text').innerText = answer;
+                                document.getElementById('theater').style.display = 'flex';
+                                document.getElementById('ans-btn').style.display = 'block';
+                                element.classList.add('used');
+                            }
+                        };
+                    })(q, a, v, cell);
+                    grid.appendChild(cell);
+                }
+            });
+            document.getElementById('ed-sec').style.display = 'none';
+        }
+
+        var ed = document.getElementById('ed-grid');
+        for(var c=1; c<=6; c++) {
+            var col = document.createElement('div');
+            col.innerHTML = "Category "+c+"<br>";
+            [200,400,600,800,1000].forEach(function
