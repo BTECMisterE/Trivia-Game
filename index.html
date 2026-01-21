@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Safe Sync</title>
+    <title>Trivia Master - Daily Double Edition</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
@@ -11,7 +11,17 @@
         .cat-h { color: #00d2ff; font-weight: bold; border-bottom: 2px solid #00d2ff; padding: 5px; text-transform: uppercase; }
         .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
         .cell.used { opacity: 0.1; }
+        
+        /* Theater and Overlays */
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:100; flex-direction: column; justify-content: center; align-items: center; }
+        #daily-double-msg { display:none; color: #ffd700; font-size: 5em; font-weight: bold; animation: blink 0.5s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+
+        .score-controls { display: none; margin-top: 30px; gap: 20px; }
+        .btn-score { padding: 15px 30px; font-size: 1.2em; color: white; border: none; border-radius: 8px; cursor: pointer; }
+        .correct { background: #28a745; }
+        .wrong { background: #dc3545; }
+        
         .editor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; text-align: left; }
         .ed-col { background: #222; padding: 10px; border-radius: 5px; }
         input { width: 90%; margin-bottom: 5px; background: #000; color: #fff; border: 1px solid #444; padding: 5px; font-size: 11px; }
@@ -23,11 +33,10 @@
 </head>
 <body>
 
-    <div id="buzzer-ui">🔔 <span id="winner-name">---</span> <button onclick="resetBuzzer()">RESET</button></div>
+    <div id="buzzer-ui">🔔 <span id="winner-name">---</span> (<span id="winner-team"></span>) <button onclick="resetBuzzer()">RESET</button></div>
 
     <div class="box">
-        <strong>1. SETUP:</strong> 
-        Room: <input type="text" id="r-in" value="Class1" style="width:120px;">
+        <strong>1. SETUP:</strong> Room: <input type="text" id="r-in" value="Class1" style="width:120px;"> 
         Teams: <input type="number" id="t-in" value="3" min="1" max="8" style="width:45px;">
         <button class="btn-blue" onclick="connect()">CONNECT & SYNC</button>
         <p id="status" style="color: yellow; margin-top: 10px;">Status: Not Connected</p>
@@ -36,16 +45,25 @@
     <div id="score-area" style="display: flex; justify-content: center; gap: 15px; margin-bottom: 20px;"></div>
     <div id="main-grid" class="grid"></div>
 
-    <div id="theater" onclick="document.getElementById('a-box').style.display='block'">
+    <div id="theater">
+        <div id="daily-double-msg">DAILY DOUBLE!</div>
+        <div id="wager-area" style="display:none; margin-bottom:20px;">
+            WAGER: <input type="number" id="wager-input" style="width:100px; font-size:1.5em;">
+            <button onclick="lockWager()" class="btn-blue">LOCK WAGER</button>
+        </div>
         <div id="q-box" style="font-size:3em; padding:30px;"></div>
+        <button id="reveal-btn" onclick="revealAnswer()" style="padding:10px 20px;">REVEAL ANSWER</button>
         <div id="a-box" style="font-size:2em; color:#ffd700; display:none; border-top:1px solid #444; padding-top:20px;"></div>
-        <button onclick="event.stopPropagation(); document.getElementById('theater').style.display='none'" style="background:#444; color:white; margin-top:30px;">CLOSE</button>
+        
+        <div id="score-controls" class="score-controls">
+            <button class="btn-score correct" onclick="autoScore(true)">CORRECT</button>
+            <button class="btn-score wrong" onclick="autoScore(false)">INCORRECT</button>
+        </div>
+        <button onclick="closeTheater()" style="background:#444; color:white; margin-top:50px;">BACK TO BOARD</button>
     </div>
 
     <div id="editor-section" class="box">
         <h3>2. BOARD EDITOR</h3>
-        <button onclick="document.getElementById('file-in').click()">📁 LOAD LOCAL JSON</button>
-        <input type="file" id="file-in" style="display:none" onchange="importJSON(event)">
         <div id="editor-container" class="editor-grid"></div>
         <button class="btn-green" onclick="saveAndBuild()">3. BUILD & SAVE TO CLOUD</button>
     </div>
@@ -60,49 +78,123 @@
         };
         firebase.initializeApp(config);
         const db = firebase.database();
-        let rRef = null;
+        let rRef, currentVal, activeBuzzerTeam, ddCoord;
 
         function connect() {
             const roomName = document.getElementById('r-in').value.trim();
             const teamNum = document.getElementById('t-in').value;
-            if(!roomName) return alert("Enter room name!");
-            
             rRef = db.ref('rooms/' + roomName);
             document.getElementById('status').innerText = "CONNECTED: " + roomName;
             document.getElementById('status').style.color = "#0f0";
-            
-            // Scoreboard setup
-            const scoreArea = document.getElementById('score-area');
-            scoreArea.innerHTML = "";
-            for(let i=1; i<=teamNum; i++) {
-                let card = document.createElement('div');
-                card.style = "background:#16213e; border:1px solid #ffd700; padding:10px; border-radius:8px;";
-                card.innerHTML = `Team ${i}<br><span style="font-size:2em;color:#ffd700;" id="s-${i}">0</span><br>
-                <button onclick="adj(${i},-100)">-</button><button onclick="adj(${i},100)">+</button>`;
-                scoreArea.appendChild(card);
-                rRef.child('scores/team'+i).on('value', s => { document.getElementById('s-'+i).innerText = s.val() || 0; });
-            }
-
-            // PULL CLOUD DATA
-            rRef.child('gameData').once('value', s => {
-                if(s.exists()) {
-                    fillEditor(s.val());
-                    buildBoard();
-                    alert("Cloud data found and loaded!");
-                }
-            });
-
+            initScoreboard(teamNum);
             rRef.child('currentBuzz').on('value', s => {
                 const v = s.val();
                 document.getElementById('buzzer-ui').style.display = v ? 'block' : 'none';
-                if(v) document.getElementById('winner-name').innerText = v.user.toUpperCase();
+                if(v) {
+                    document.getElementById('winner-name').innerText = v.user.toUpperCase();
+                    document.getElementById('winner-team').innerText = v.team;
+                    activeBuzzerTeam = v.team.replace("Team ", ""); 
+                }
             });
+            rRef.child('gameData').once('value', s => { if(s.exists()) { fillEditor(s.val()); buildBoard(); } });
+        }
+
+        function initScoreboard(count) {
+            const area = document.getElementById('score-area'); area.innerHTML = "";
+            for(let i=1; i<=count; i++) {
+                let card = document.createElement('div');
+                card.style = "background:#16213e; border:1px solid #ffd700; padding:10px; border-radius:8px; min-width:80px;";
+                card.innerHTML = `Team ${i}<br><span style="font-size:2em;color:#ffd700;" id="s-${i}">0</span>`;
+                area.appendChild(card);
+                rRef.child('scores/team'+i).on('value', s => { document.getElementById('s-'+i).innerText = s.val() || 0; });
+            }
+        }
+
+        function launch(q, a, val, cell, coord) {
+            currentVal = parseInt(val);
+            document.getElementById('theater').style.display = 'flex';
+            document.getElementById('q-box').style.display = 'none';
+            document.getElementById('a-box').style.display = 'none';
+            document.getElementById('reveal-btn').style.display = 'none';
+            document.getElementById('score-controls').style.display = 'none';
+
+            if(coord === ddCoord) {
+                document.getElementById('daily-double-msg').style.display = 'block';
+                document.getElementById('wager-area').style.display = 'block';
+                document.getElementById('q-box').innerText = "DAILY DOUBLE: " + q;
+            } else {
+                document.getElementById('daily-double-msg').style.display = 'none';
+                document.getElementById('wager-area').style.display = 'none';
+                document.getElementById('q-box').style.display = 'block';
+                document.getElementById('q-box').innerText = q;
+                document.getElementById('reveal-btn').style.display = 'block';
+            }
+            document.getElementById('a-box').innerText = a;
+            cell.classList.add('used');
+            if(rRef) rRef.child('currentQuestion').set(q);
+        }
+
+        function lockWager() {
+            currentVal = parseInt(document.getElementById('wager-input').value) || 0;
+            document.getElementById('wager-area').style.display = 'none';
+            document.getElementById('daily-double-msg').style.display = 'none';
+            document.getElementById('q-box').style.display = 'block';
+            document.getElementById('reveal-btn').style.display = 'block';
+        }
+
+        function revealAnswer() {
+            document.getElementById('a-box').style.display = 'block';
+            document.getElementById('reveal-btn').style.display = 'none';
+            if(activeBuzzerTeam) document.getElementById('score-controls').style.display = 'flex';
+        }
+
+        function autoScore(isCorrect) {
+            const scoreEl = document.getElementById('s-' + activeBuzzerTeam);
+            const newScore = parseInt(scoreEl.innerText) + (currentVal * (isCorrect ? 1 : -1));
+            rRef.child('scores/team' + activeBuzzerTeam).set(newScore);
+            closeTheater();
+        }
+
+        function closeTheater() { document.getElementById('theater').style.display = 'none'; resetBuzzer(); if(rRef) rRef.child('currentQuestion').set(null); }
+        function resetBuzzer() { activeBuzzerTeam = null; if(rRef) rRef.child('currentBuzz').set(null); }
+
+        function buildBoard() {
+            ddCoord = Math.floor(Math.random() * 30); // Randomly hide the Daily Double
+            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
+            for(let c=1; c<=6; c++) {
+                let h = document.createElement('div'); h.className='cat-h';
+                h.innerText = document.getElementById('cn-'+c).value || "CAT "+c;
+                grid.appendChild(h);
+            }
+            let count = 0;
+            [200,400,600,800,1000].forEach(val => {
+                for(let c=1; c<=6; c++) {
+                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${val}"]`).value;
+                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${val}"]`).value;
+                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+val;
+                    let thisCoord = count;
+                    cell.onclick = () => { if(q) launch(q, a, val, cell, thisCoord); };
+                    grid.appendChild(cell);
+                    count++;
+                }
+            });
+        }
+
+        // Editor UI
+        const area = document.getElementById('editor-container');
+        for(let c=1; c<=6; c++) {
+            let col = document.createElement('div'); col.className = 'ed-col';
+            col.innerHTML = `<strong>CAT ${c}</strong><br><input type="text" id="cn-${c}" placeholder="Name">`;
+            [200,400,600,800,1000].forEach(v => {
+                col.innerHTML += `<input type="text" placeholder="Q" class="qi" data-c="${c}" data-v="${v}">`;
+                col.innerHTML += `<input type="text" placeholder="A" class="ai" data-c="${c}" data-v="${v}">`;
+            });
+            area.appendChild(col);
         }
 
         function fillEditor(data) {
             data.categories.forEach((cat, i) => {
-                const cId = i + 1;
-                document.getElementById(`cn-${cId}`).value = cat.name;
+                const cId = i + 1; document.getElementById(`cn-${cId}`).value = cat.name;
                 cat.items.forEach((item, j) => {
                     const vL = [200,400,600,800,1000];
                     document.querySelector(`.qi[data-c="${cId}"][data-v="${vL[j]}"]`).value = item.q;
@@ -116,63 +208,13 @@
             for(let c=1; c<=6; c++) {
                 let cat = { name: document.getElementById('cn-'+c).value, items: [] };
                 [200,400,600,800,1000].forEach(v => {
-                    cat.items.push({ 
-                        q: document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value, 
-                        a: document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value 
-                    });
+                    cat.items.push({ q: document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value, a: document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value });
                 });
                 data.categories.push(cat);
             }
             if(rRef) rRef.child('gameData').set(data);
             buildBoard();
             document.getElementById('editor-section').style.display = 'none';
-        }
-
-        function buildBoard() {
-            const grid = document.getElementById('main-grid');
-            grid.innerHTML = "";
-            for(let c=1; c<=6; c++) {
-                let h = document.createElement('div'); h.className='cat-h';
-                h.innerText = document.getElementById('cn-'+c).value || "CAT "+c;
-                grid.appendChild(h);
-            }
-            [200,400,600,800,1000].forEach(val => {
-                for(let c=1; c<=6; c++) {
-                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${val}"]`).value;
-                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${val}"]`).value;
-                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+val;
-                    cell.onclick = () => { if(q) { 
-                        document.getElementById('q-box').innerText=q; document.getElementById('a-box').innerText=a;
-                        document.getElementById('a-box').style.display='none'; document.getElementById('theater').style.display='flex';
-                        cell.classList.add('used'); if(rRef) rRef.child('currentQuestion').set(q);
-                    }};
-                    grid.appendChild(cell);
-                }
-            });
-        }
-
-        // Initialize Editor
-        const area = document.getElementById('editor-container');
-        for(let c=1; c<=6; c++) {
-            let col = document.createElement('div'); col.className = 'ed-col';
-            col.innerHTML = `<strong>CAT ${c}</strong><br><input type="text" id="cn-${c}" placeholder="Name">`;
-            [200,400,600,800,1000].forEach(v => {
-                col.innerHTML += `<input type="text" placeholder="Q" class="qi" data-c="${c}" data-v="${v}">`;
-                col.innerHTML += `<input type="text" placeholder="A" class="ai" data-c="${c}" data-v="${v}">`;
-            });
-            area.appendChild(col);
-        }
-
-        function adj(num, amt) {
-            const el = document.getElementById('s-'+num);
-            const ns = parseInt(el.innerText) + amt;
-            rRef.child('scores/team'+num).set(ns);
-        }
-        function resetBuzzer() { if(rRef) rRef.child('currentBuzz').set(null); }
-        function importJSON(e) {
-            const reader = new FileReader();
-            reader.onload = (ev) => fillEditor(JSON.parse(ev.target.result));
-            reader.readAsText(e.target.files[0]);
         }
     </script>
 </body>
