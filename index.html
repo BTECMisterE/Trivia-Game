@@ -36,8 +36,11 @@
 
     <div class="sidebar">
         <div class="qr-box">
-            <img id="qr-img" style="width: 150px; height: 150px;" alt="QR Code">
+            <img id="qr-img" style="width: 150px; height: 150px;" alt="QR Loading...">
             <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN</div>
+            <div style="font-size: 11px; margin-top:5px;">
+                <a id="qr-link" href="#" target="_blank" style="color:blue;">Or Click Here</a>
+            </div>
         </div>
 
         <div id="buzzer-ui">
@@ -88,10 +91,20 @@
         const db = firebase.database();
         let rRef, teamMax = 3, gameData = null, musicPlaying = false;
 
+        // --- NEW QR GENERATOR (QRServer) ---
         window.onload = function() {
-            // Point QR to play.html
+            // Calculate the link to play.html
             const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + "/play.html";
-            document.getElementById('qr-img').src = `https://chart.googleapis.com/chart?chs=150x150&cht=qr&chl=${encodeURIComponent(baseUrl)}`;
+            
+            // Set the clickable backup link
+            document.getElementById('qr-link').href = baseUrl;
+            document.getElementById('qr-link').innerText = baseUrl; // Show the URL so you can verify it
+            
+            // Use QRServer API instead of Google
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(baseUrl)}`;
+            
+            // Load the image
+            document.getElementById('qr-img').src = qrUrl;
         };
 
         function connectRoom() {
