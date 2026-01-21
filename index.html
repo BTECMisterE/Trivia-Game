@@ -7,27 +7,41 @@
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
         
-        /* Sidebar Styles */
+        /* Sidebar */
         .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
         .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
         
         .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; text-align: left; }
         .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
         
-        input, select { width: 92%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; }
+        /* High Visibility Inputs */
+        input { width: 92%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; }
+        select { width: 100%; padding: 8px; margin: 5px 0; border-radius: 4px; }
+        
+        /* Buttons */
         button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
         .btn-red { background: #e94560; color: white; }
         
-        /* Game Grid */
+        /* Grid */
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
         .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; display: flex; align-items: center; justify-content: center; }
         .cell.used { opacity: 0.15; }
         
         /* Theater Overlay */
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
+        
+        /* Buzzers */
         #buzzer-ui { background: #e94560; padding: 10px; border-radius: 5px; display: none; text-align: center; font-weight: bold; margin-bottom: 10px; }
+        
+        #theater-buzzer { 
+            display:none; margin-bottom:20px; color:#fff; font-size:1.5em; font-weight:bold; 
+            border: 3px solid #e94560; padding: 15px 30px; border-radius: 10px; background: #e94560; 
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.6);
+        }
+        @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
     </style>
 </head>
 <body>
@@ -38,9 +52,7 @@
         <div class="qr-box">
             <img id="qr-img" style="width: 150px; height: 150px;" alt="QR Loading...">
             <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN</div>
-            <div style="font-size: 11px; margin-top:5px;">
-                <a id="qr-link" href="#" target="_blank" style="color:blue;">Or Click Here</a>
-            </div>
+            <div style="font-size: 11px; margin-top:5px;"><a id="qr-link" href="#" target="_blank" style="color:blue;">Or Click Here</a></div>
         </div>
 
         <div id="buzzer-ui">
@@ -50,14 +62,25 @@
 
         <div class="box">
             <strong>1. SETUP ROOM</strong>
+            <div style="margin-bottom:5px; color:#ccc; font-size:12px;">Room Name:</div>
             <input type="text" id="r-name" value="Class1">
+
+            <div style="margin-top:10px; margin-bottom:5px; color:#ccc; font-size:12px;">How many Teams?</div>
+            <select id="t-count" style="background: white; color: black; font-weight: bold; border: 2px solid #00d2ff;">
+                <option value="2">2 Teams</option>
+                <option value="3" selected>3 Teams</option>
+                <option value="4">4 Teams</option>
+                <option value="5">5 Teams</option>
+                <option value="6">6 Teams</option>
+            </select>
+
             <button class="btn-blue" onclick="connectRoom()">ACTIVATE ROOM</button>
             <div id="status-msg" style="color: yellow; font-size: 12px; margin-top: 5px;">Status: Offline</div>
         </div>
 
         <div class="box">
             <strong>2. LESSON</strong>
-            <select id="library-dropdown"><option>Scanning Library...</option></select>
+            <select id="library-dropdown" style="background:#000; color:#fff;"><option>Scanning Library...</option></select>
             <button class="btn-blue" onclick="loadLesson()">LOAD QUESTIONS</button>
         </div>
 
@@ -76,11 +99,17 @@
     </div>
 
     <div id="theater">
+        <div id="theater-buzzer">
+            🔔 <span id="th-user">NAME</span> BUZZED!
+            <button onclick="resetBuzzer()" style="margin-left:20px; background:white; color:#e94560; border:none; padding:5px 10px; border-radius:5px; cursor:pointer;">RESET</button>
+        </div>
+
         <div id="q-box" style="font-size:2.5em; padding:30px; text-align:center;"></div>
         <button id="rev-btn" onclick="reveal()" class="btn-blue" style="width:200px;">SHOW ANSWER</button>
         <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px; text-align:center;"></div>
+        
         <div id="score-ctrls" style="display:none; margin-top:20px;">
-            <div id="team-btns" style="display:flex; gap:10px; justify-content:center;"></div>
+            <div id="team-btns" style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;"></div>
             <br><button onclick="closeTheater()" style="background:#444; color:white; width:200px;">BACK TO BOARD</button>
         </div>
     </div>
@@ -91,29 +120,25 @@
         const db = firebase.database();
         let rRef, teamMax = 3, gameData = null, musicPlaying = false;
 
-        // --- NEW QR GENERATOR (QRServer) ---
         window.onload = function() {
-            // Calculate the link to play.html
             const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + "/play.html";
-            
-            // Set the clickable backup link
             document.getElementById('qr-link').href = baseUrl;
-            document.getElementById('qr-link').innerText = baseUrl; // Show the URL so you can verify it
-            
-            // Use QRServer API instead of Google
-            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(baseUrl)}`;
-            
-            // Load the image
-            document.getElementById('qr-img').src = qrUrl;
+            document.getElementById('qr-link').innerText = baseUrl;
+            document.getElementById('qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(baseUrl)}`;
         };
 
         function connectRoom() {
             const room = document.getElementById('r-name').value;
+            // READ THE NEW DROPDOWN
+            teamMax = parseInt(document.getElementById('t-count').value) || 3;
+
             rRef = db.ref('rooms/' + room);
             rRef.child('metadata').set({ status: 'active', lastActive: Date.now() });
             rRef.child('metadata').onDisconnect().remove();
+            
             document.getElementById('status-msg').innerText = "✅ Active: " + room;
             document.getElementById('status-msg').style.color = "#0f0";
+            
             setupListeners();
         }
 
@@ -122,92 +147,4 @@
             if(!name || name.includes("Scanning")) return alert("Select a lesson.");
             db.ref('library/' + name).once('value', s => {
                 gameData = s.val();
-                document.getElementById('welcome').style.display = 'none';
-                buildBoard();
-            });
-        }
-
-        function buildBoard() {
-            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
-            gameData.categories.forEach(cat => {
-                let h = document.createElement('div'); h.style.color="#00d2ff"; h.style.fontWeight="bold"; h.innerText = cat.name; grid.appendChild(h);
-            });
-            for(let r=0; r<5; r++) {
-                gameData.categories.forEach(cat => {
-                    const item = cat.items[r];
-                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+(200*(r+1));
-                    cell.onclick = () => {
-                        document.getElementById('q-box').innerText = item.q;
-                        document.getElementById('a-box').innerText = item.a;
-                        document.getElementById('theater').style.display = 'flex';
-                        document.getElementById('a-box').style.display = 'none';
-                        document.getElementById('rev-btn').style.display = 'block';
-                        document.getElementById('score-ctrls').style.display = 'none';
-                        if(musicPlaying) document.getElementById('bg-music').volume = 0.05;
-                        cell.classList.add('used');
-                    };
-                    grid.appendChild(cell);
-                });
-            }
-        }
-
-        function reveal() {
-            document.getElementById('a-box').style.display = 'block';
-            document.getElementById('rev-btn').style.display = 'none';
-            document.getElementById('score-ctrls').style.display = 'block';
-            const area = document.getElementById('team-btns'); area.innerHTML = "";
-            for(let i=1; i<=teamMax; i++) {
-                area.innerHTML += `<div style="background:#333; padding:5px; border-radius:5px;">Team ${i} <button onclick="addScore(${i}, 200)" style="background:green; color:white;">+</button></div>`;
-            }
-        }
-
-        function addScore(t, amt) {
-            const el = document.getElementById('ts-'+t);
-            rRef.child('scores/team'+t).set(parseInt(el.innerText) + amt);
-        }
-
-        function resetScores() {
-            if(confirm("Reset all scores to 0?")) {
-                for(let i=1; i<=teamMax; i++) rRef.child('scores/team'+i).set(0);
-            }
-        }
-
-        function setupListeners() {
-            const sArea = document.getElementById('score-area'); sArea.innerHTML = "";
-            for(let i=1; i<=teamMax; i++) {
-                sArea.innerHTML += `<div style="background:#222; padding:10px; border:1px solid #ffd700; border-radius:5px;">T${i}<br><span id="ts-${i}" style="color:#ffd700; font-size:1.5em;">0</span></div>`;
-                rRef.child('scores/team'+i).on('value', s => { document.getElementById('ts-'+i).innerText = s.val() || 0; });
-            }
-            db.ref('library').on('value', s => {
-                const d = document.getElementById('library-dropdown'); d.innerHTML = '<option value="">-- Select Lesson --</option>';
-                s.forEach(c => { let o = document.createElement('option'); o.value = c.key; o.innerText = c.key; d.appendChild(o); });
-            });
-            rRef.child('currentBuzz').on('value', s => {
-                const v = s.val(); 
-                document.getElementById('buzzer-ui').style.display = v ? 'block' : 'none';
-                if(v) document.getElementById('b-user').innerText = v.user;
-            });
-        }
-
-        function toggleMusic() {
-            const m = document.getElementById('bg-music');
-            if(musicPlaying) { m.pause(); document.getElementById('music-btn').innerText="🎵 MUSIC: OFF"; } 
-            else { m.volume=0.2; m.play(); document.getElementById('music-btn').innerText="🎶 MUSIC: ON"; }
-            musicPlaying = !musicPlaying;
-        }
-
-        function closeTheater() { document.getElementById('theater').style.display = 'none'; if(musicPlaying) document.getElementById('bg-music').volume = 0.2; resetBuzzer(); }
-        function resetBuzzer() { if(rRef) rRef.child('currentBuzz').set(null); }
-        function shuffleTeams() { 
-            rRef.child('players').once('value', s => {
-                const players = s.val();
-                if(!players) return alert("No players!");
-                let pIds = Object.keys(players);
-                for (let i = pIds.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pIds[i], pIds[j]] = [pIds[j], pIds[i]]; }
-                pIds.forEach((id, index) => { rRef.child('players/' + id + '/team').set((index % teamMax) + 1); });
-                alert("Teams Shuffled!");
-            });
-        }
-    </script>
-</body>
-</html>
+                document.getElementById
