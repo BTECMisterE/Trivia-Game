@@ -1,20 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Sample Bank Edition</title>
+    <title>Trivia Master - Sample Fix</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
         .box { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; margin-bottom: 20px; }
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin: 20px 0; }
         .cat-h { color: #00d2ff; font-weight: bold; border-bottom: 2px solid #00d2ff; padding: 5px; text-transform: uppercase; }
-        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; transition: 0.3s; }
-        .cell.used { opacity: 0.15; transform: scale(0.95); }
+        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
+        .cell.used { opacity: 0.15; }
         
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:100; flex-direction: column; justify-content: center; align-items: center; }
         .library-controls { background: #1a2a3a; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px dashed #00d2ff; }
-        select { padding: 8px; border-radius: 5px; background: #000; color: white; border: 1px solid #00d2ff; margin: 0 10px; }
+        select { padding: 8px; border-radius: 5px; background: #000; color: white; border: 1px solid #00d2ff; margin: 0 10px; min-width: 200px; }
         
         .editor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; text-align: left; }
         .ed-col { background: #222; padding: 10px; border-radius: 5px; }
@@ -32,7 +32,7 @@
     <div class="box">
         <strong>1. SESSION:</strong> Room: <input type="text" id="r-in" value="Class1" style="width:100px;"> 
         <button class="btn-blue" onclick="connect()">CONNECT</button>
-        <button class="btn-blue" onclick="refreshBoard()">🔄 RESET USED CELLS</button>
+        <button class="btn-blue" onclick="refreshBoard()">🔄 RESET BOARD</button>
         <p id="status" style="color: yellow; margin: 10px 0 0 0;">Status: Not Connected</p>
     </div>
 
@@ -49,11 +49,10 @@
         <h3>2. LESSON LIBRARY</h3>
         <div class="library-controls">
             <strong>BROWSE CLOUD:</strong>
-            <select id="library-select" onchange="document.getElementById('lesson-name').value = this.value">
-                <option value="">-- Loading Library... --</option>
+            <select id="library-select">
+                <option value="">-- Connect to see lessons --</option>
             </select>
             <button onclick="loadFromLibrary()" style="background:#00d2ff; color:black;">📂 LOAD SELECTED</button>
-            <button onclick="preloadSampleData()" style="background:#f39c12; color:white;">✨ RE-INJECT SAMPLES</button>
         </div>
         <div id="editor-container" class="editor-grid"></div>
         <button class="btn-green" onclick="generateBoard()">3. BUILD GAME BOARD</button>
@@ -71,64 +70,18 @@
         const db = firebase.database();
         let rRef = null;
 
-        window.onload = function() {
-            createEditorUI();
-            updateLibraryDropdown();
-            checkAndSeedLibrary();
-        };
-
-        function checkAndSeedLibrary() {
-            db.ref('library').once('value', s => {
-                if(!s.exists()) { preloadSampleData(); }
-            });
-        }
-
-        function preloadSampleData() {
-            const samples = {
-                "Sample_Teen_Pop_Culture": {
-                    categories: [
-                        { name: "Music", items: [{q:"Who is the 'Anti-Hero' singer?", a:"Taylor Swift"},{q:"'Certified Lover Boy' artist?", a:"Drake"},{q:"Singer of 'Vampire'?", a:"Olivia Rodrigo"},{q:"K-Pop group with 'Dynamite'?", a:"BTS"},{q:"Singer of 'As It Was'?", a:"Harry Styles"}] },
-                        { name: "Gaming", items: [{q:"Building game with Creepers?", a:"Minecraft"},{q:"Battle Royale with a Battle Bus?", a:"Fortnite"},{q:"Pink puffball who eats enemies?", a:"Kirby"},{q:"Legend of Zelda main character?", a:"Link"},{q:"Game about social deduction in space?", a:"Among Us"}] },
-                        { name: "Movies", items: [{q:"Who is the web-slinging hero?", a:"Spider-Man"},{q:"Barbie's pink world movie lead?", a:"Margot Robbie"},{q:"The 'Boy Who Lived'?", a:"Harry Potter"},{q:"Blue people on Pandora movie?", a:"Avatar"},{q:"Voice of Groot?", a:"Vin Diesel"}] },
-                        { name: "Social Media", items: [{q:"App known for short-form video?", a:"TikTok"},{q:"Platform previously known as Twitter?", a:"X"},{q:"Site for gamers to stream?", a:"Twitch"},{q:"Filter app for 'Streaks'?", a:"Snapchat"},{q:"App for photo sharing/Reels?", a:"Instagram"}] },
-                        { name: "Tech", items: [{q:"AI chatbot made by OpenAI?", a:"ChatGPT"},{q:"Manufacturer of the iPhone?", a:"Apple"},{q:"Electric car company lead by Elon Musk?", a:"Tesla"},{q:"Company that owns YouTube?", a:"Google"},{q:"Virtual reality headset by Meta?", a:"Quest"}] },
-                        { name: "Emojis", items: [{q:"What is 'Skull' used for?", a:"I'm dead/Laughing"},{q:"What does 'Fire' mean?", a:"Cool/Hot"},{q:"What is 'Cap'?", a:"Lying"},{q:"What is 'GOAT'?", a:"Greatest of All Time"},{q:"Clapping hands between words?", a:"Emphasis"}] }
-                    ]
-                }
-            };
-            db.ref('library').update(samples).then(() => {
-                alert("Sample question bank loaded! Look for 'Sample_Teen_Pop_Culture' in the dropdown.");
-                updateLibraryDropdown();
-            });
-        }
-
-        // --- Core Functions (Logic remains same for stability) ---
-        function updateLibraryDropdown() {
-            const dropdown = document.getElementById('library-select');
-            db.ref('library').on('value', s => {
-                dropdown.innerHTML = '<option value="">-- Select Saved Lesson --</option>';
-                s.forEach(child => {
-                    let opt = document.createElement('option');
-                    opt.value = child.key; opt.innerText = child.key;
-                    dropdown.appendChild(opt);
-                });
-            });
-        }
-
-        function loadFromLibrary() {
-            const name = document.getElementById('library-select').value;
-            if(!name) return;
-            db.ref('library/' + name).once('value', s => {
-                if(s.exists()) { fillEditor(s.val()); alert("Sample Loaded!"); }
-            });
-        }
+        window.onload = createEditorUI;
 
         function connect() {
             const roomName = document.getElementById('r-in').value.trim();
             rRef = db.ref('rooms/' + roomName);
             document.getElementById('status').innerText = "CONNECTED: " + roomName;
             document.getElementById('status').style.color = "#0f0";
+            
             initScoreboard(3);
+            updateLibraryDropdown(); // Start watching for library changes
+            checkAndSeedLibrary();   // Ensure samples exist
+            
             rRef.child('currentBuzz').on('value', s => {
                 const v = s.val();
                 document.getElementById('buzzer-ui').style.display = v ? 'block' : 'none';
@@ -136,203 +89,60 @@
             });
         }
 
-        function initScoreboard(count) {
-            const area = document.getElementById('score-area'); area.innerHTML = "";
-            for(let i=1; i<=count; i++) {
-                let card = document.createElement('div');
-                card.style = "background:#16213e; border:1px solid #ffd700; padding:10px; border-radius:8px; min-width:80px;";
-                card.innerHTML = `Team ${i}<br><span style="font<!DOCTYPE html>
-<html>
-<head>
-    <title>Trivia Master - Daily Double Edition</title>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
-        .box { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; margin-bottom: 20px; }
-        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin: 20px 0; }
-        .cat-h { color: #00d2ff; font-weight: bold; border-bottom: 2px solid #00d2ff; padding: 5px; text-transform: uppercase; }
-        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
-        .cell.used { opacity: 0.1; }
-        
-        /* Theater and Overlays */
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:100; flex-direction: column; justify-content: center; align-items: center; }
-        #daily-double-msg { display:none; color: #ffd700; font-size: 5em; font-weight: bold; animation: blink 0.5s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
-
-        .score-controls { display: none; margin-top: 30px; gap: 20px; }
-        .btn-score { padding: 15px 30px; font-size: 1.2em; color: white; border: none; border-radius: 8px; cursor: pointer; }
-        .correct { background: #28a745; }
-        .wrong { background: #dc3545; }
-        
-        .editor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; text-align: left; }
-        .ed-col { background: #222; padding: 10px; border-radius: 5px; }
-        input { width: 90%; margin-bottom: 5px; background: #000; color: #fff; border: 1px solid #444; padding: 5px; font-size: 11px; }
-        button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; margin: 5px; }
-        .btn-blue { background: #00d2ff; color: #000; }
-        .btn-green { background: #28a745; color: #fff; width: 100%; padding: 20px; font-size: 1.2em; margin-top: 15px; }
-        #buzzer-ui { background: #e94560; padding: 20px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 200; border: 2px solid white; }
-    </style>
-</head>
-<body>
-
-    <div id="buzzer-ui">🔔 <span id="winner-name">---</span> (<span id="winner-team"></span>) <button onclick="resetBuzzer()">RESET</button></div>
-
-    <div class="box">
-        <strong>1. SETUP:</strong> Room: <input type="text" id="r-in" value="Class1" style="width:120px;"> 
-        Teams: <input type="number" id="t-in" value="3" min="1" max="8" style="width:45px;">
-        <button class="btn-blue" onclick="connect()">CONNECT & SYNC</button>
-        <p id="status" style="color: yellow; margin-top: 10px;">Status: Not Connected</p>
-    </div>
-
-    <div id="score-area" style="display: flex; justify-content: center; gap: 15px; margin-bottom: 20px;"></div>
-    <div id="main-grid" class="grid"></div>
-
-    <div id="theater">
-        <div id="daily-double-msg">DAILY DOUBLE!</div>
-        <div id="wager-area" style="display:none; margin-bottom:20px;">
-            WAGER: <input type="number" id="wager-input" style="width:100px; font-size:1.5em;">
-            <button onclick="lockWager()" class="btn-blue">LOCK WAGER</button>
-        </div>
-        <div id="q-box" style="font-size:3em; padding:30px;"></div>
-        <button id="reveal-btn" onclick="revealAnswer()" style="padding:10px 20px;">REVEAL ANSWER</button>
-        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; border-top:1px solid #444; padding-top:20px;"></div>
-        
-        <div id="score-controls" class="score-controls">
-            <button class="btn-score correct" onclick="autoScore(true)">CORRECT</button>
-            <button class="btn-score wrong" onclick="autoScore(false)">INCORRECT</button>
-        </div>
-        <button onclick="closeTheater()" style="background:#444; color:white; margin-top:50px;">BACK TO BOARD</button>
-    </div>
-
-    <div id="editor-section" class="box">
-        <h3>2. BOARD EDITOR</h3>
-        <div id="editor-container" class="editor-grid"></div>
-        <button class="btn-green" onclick="saveAndBuild()">3. BUILD & SAVE TO CLOUD</button>
-    </div>
-
-    <script>
-        const config = {
-            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-            authDomain: "trivia-game-3fe59.firebaseapp.com",
-            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-            projectId: "trivia-game-3fe59",
-            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
-        };
-        firebase.initializeApp(config);
-        const db = firebase.database();
-        let rRef, currentVal, activeBuzzerTeam, ddCoord;
-
-        function connect() {
-            const roomName = document.getElementById('r-in').value.trim();
-            const teamNum = document.getElementById('t-in').value;
-            rRef = db.ref('rooms/' + roomName);
-            document.getElementById('status').innerText = "CONNECTED: " + roomName;
-            document.getElementById('status').style.color = "#0f0";
-            initScoreboard(teamNum);
-            rRef.child('currentBuzz').on('value', s => {
-                const v = s.val();
-                document.getElementById('buzzer-ui').style.display = v ? 'block' : 'none';
-                if(v) {
-                    document.getElementById('winner-name').innerText = v.user.toUpperCase();
-                    document.getElementById('winner-team').innerText = v.team;
-                    activeBuzzerTeam = v.team.replace("Team ", ""); 
+        function checkAndSeedLibrary() {
+            db.ref('library').once('value', s => {
+                if(!s.exists()) {
+                    console.log("Library empty, seeding samples...");
+                    const samples = {
+                        "Sample_Teen_Pop_Culture": {
+                            categories: [
+                                { name: "Music", items: [{q:"Who is the 'Anti-Hero' singer?", a:"Taylor Swift"},{q:"'Certified Lover Boy' artist?", a:"Drake"},{q:"Singer of 'Vampire'?", a:"Olivia Rodrigo"},{q:"K-Pop group with 'Dynamite'?", a:"BTS"},{q:"Singer of 'As It Was'?", a:"Harry Styles"}] },
+                                { name: "Gaming", items: [{q:"Building game with Creepers?", a:"Minecraft"},{q:"Battle Royale with a Battle Bus?", a:"Fortnite"},{q:"Pink puffball who eats enemies?", a:"Kirby"},{q:"Legend of Zelda main character?", a:"Link"},{q:"Game about social deduction in space?", a:"Among Us"}] },
+                                { name: "Movies", items: [{q:"Who is the web-slinging hero?", a:"Spider-Man"},{q:"Barbie's pink world movie lead?", a:"Margot Robbie"},{q:"The 'Boy Who Lived'?", a:"Harry Potter"},{q:"Blue people on Pandora movie?", a:"Avatar"},{q:"Voice of Groot?", a:"Vin Diesel"}] },
+                                { name: "Social Media", items: [{q:"App known for short-form video?", a:"TikTok"},{q:"Platform previously known as Twitter?", a:"X"},{q:"Site for gamers to stream?", a:"Twitch"},{q:"Filter app for 'Streaks'?", a:"Snapchat"},{q:"App for photo sharing/Reels?", a:"Instagram"}] },
+                                { name: "Tech", items: [{q:"AI chatbot made by OpenAI?", a:"ChatGPT"},{q:"Manufacturer of the iPhone?", a:"Apple"},{q:"Electric car company lead by Elon Musk?", a:"Tesla"},{q:"Company that owns YouTube?", a:"Google"},{q:"Virtual reality headset by Meta?", a:"Quest"}] },
+                                { name: "Emojis", items: [{q:"What is 'Skull' used for?", a:"I'm dead/Laughing"},{q:"What does 'Fire' mean?", a:"Cool/Hot"},{q:"What is 'Cap'?", a:"Lying"},{q:"What is 'GOAT'?", a:"Greatest of All Time"},{q:"Clapping hands between words?", a:"Emphasis"}] }
+                            ]
+                        }
+                    };
+                    db.ref('library').set(samples);
                 }
             });
-            rRef.child('gameData').once('value', s => { if(s.exists()) { fillEditor(s.val()); buildBoard(); } });
         }
 
-        function initScoreboard(count) {
-            const area = document.getElementById('score-area'); area.innerHTML = "";
-            for(let i=1; i<=count; i++) {
-                let card = document.createElement('div');
-                card.style = "background:#16213e; border:1px solid #ffd700; padding:10px; border-radius:8px; min-width:80px;";
-                card.innerHTML = `Team ${i}<br><span style="font-size:2em;color:#ffd700;" id="s-${i}">0</span>`;
-                area.appendChild(card);
-                rRef.child('scores/team'+i).on('value', s => { document.getElementById('s-'+i).innerText = s.val() || 0; });
-            }
+        function updateLibraryDropdown() {
+            const dropdown = document.getElementById('library-select');
+            db.ref('library').on('value', s => {
+                dropdown.innerHTML = '<option value="">-- Select Saved Lesson --</option>';
+                if(s.exists()) {
+                    s.forEach(child => {
+                        let opt = document.createElement('option');
+                        opt.value = child.key; opt.innerText = child.key;
+                        dropdown.appendChild(opt);
+                    });
+                }
+            });
         }
 
-        function launch(q, a, val, cell, coord) {
-            currentVal = parseInt(val);
-            document.getElementById('theater').style.display = 'flex';
-            document.getElementById('q-box').style.display = 'none';
-            document.getElementById('a-box').style.display = 'none';
-            document.getElementById('reveal-btn').style.display = 'none';
-            document.getElementById('score-controls').style.display = 'none';
-
-            if(coord === ddCoord) {
-                document.getElementById('daily-double-msg').style.display = 'block';
-                document.getElementById('wager-area').style.display = 'block';
-                document.getElementById('q-box').innerText = "DAILY DOUBLE: " + q;
-            } else {
-                document.getElementById('daily-double-msg').style.display = 'none';
-                document.getElementById('wager-area').style.display = 'none';
-                document.getElementById('q-box').style.display = 'block';
-                document.getElementById('q-box').innerText = q;
-                document.getElementById('reveal-btn').style.display = 'block';
-            }
-            document.getElementById('a-box').innerText = a;
-            cell.classList.add('used');
-            if(rRef) rRef.child('currentQuestion').set(q);
+        function loadFromLibrary() {
+            const name = document.getElementById('library-select').value;
+            if(!name) return alert("Select a lesson first!");
+            db.ref('library/' + name).once('value', s => {
+                if(s.exists()) { fillEditor(s.val()); alert("Loaded!"); }
+            });
         }
 
-        function lockWager() {
-            currentVal = parseInt(document.getElementById('wager-input').value) || 0;
-            document.getElementById('wager-area').style.display = 'none';
-            document.getElementById('daily-double-msg').style.display = 'none';
-            document.getElementById('q-box').style.display = 'block';
-            document.getElementById('reveal-btn').style.display = 'block';
-        }
-
-        function revealAnswer() {
-            document.getElementById('a-box').style.display = 'block';
-            document.getElementById('reveal-btn').style.display = 'none';
-            if(activeBuzzerTeam) document.getElementById('score-controls').style.display = 'flex';
-        }
-
-        function autoScore(isCorrect) {
-            const scoreEl = document.getElementById('s-' + activeBuzzerTeam);
-            const newScore = parseInt(scoreEl.innerText) + (currentVal * (isCorrect ? 1 : -1));
-            rRef.child('scores/team' + activeBuzzerTeam).set(newScore);
-            closeTheater();
-        }
-
-        function closeTheater() { document.getElementById('theater').style.display = 'none'; resetBuzzer(); if(rRef) rRef.child('currentQuestion').set(null); }
-        function resetBuzzer() { activeBuzzerTeam = null; if(rRef) rRef.child('currentBuzz').set(null); }
-
-        function buildBoard() {
-            ddCoord = Math.floor(Math.random() * 30); // Randomly hide the Daily Double
-            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
+        function createEditorUI() {
+            const area = document.getElementById('editor-container'); area.innerHTML = "";
             for(let c=1; c<=6; c++) {
-                let h = document.createElement('div'); h.className='cat-h';
-                h.innerText = document.getElementById('cn-'+c).value || "CAT "+c;
-                grid.appendChild(h);
+                let col = document.createElement('div'); col.className = 'ed-col';
+                col.innerHTML = `<strong>CAT ${c}</strong><br><input type="text" id="cn-${c}" placeholder="Name">`;
+                [200,400,600,800,1000].forEach(v => {
+                    col.innerHTML += `<input type="text" placeholder="Q" class="qi" data-c="${c}" data-v="${v}">`;
+                    col.innerHTML += `<input type="text" placeholder="A" class="ai" data-c="${c}" data-v="${v}">`;
+                });
+                area.appendChild(col);
             }
-            let count = 0;
-            [200,400,600,800,1000].forEach(val => {
-                for(let c=1; c<=6; c++) {
-                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${val}"]`).value;
-                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${val}"]`).value;
-                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+val;
-                    let thisCoord = count;
-                    cell.onclick = () => { if(q) launch(q, a, val, cell, thisCoord); };
-                    grid.appendChild(cell);
-                    count++;
-                }
-            });
-        }
-
-        // Editor UI
-        const area = document.getElementById('editor-container');
-        for(let c=1; c<=6; c++) {
-            let col = document.createElement('div'); col.className = 'ed-col';
-            col.innerHTML = `<strong>CAT ${c}</strong><br><input type="text" id="cn-${c}" placeholder="Name">`;
-            [200,400,600,800,1000].forEach(v => {
-                col.innerHTML += `<input type="text" placeholder="Q" class="qi" data-c="${c}" data-v="${v}">`;
-                col.innerHTML += `<input type="text" placeholder="A" class="ai" data-c="${c}" data-v="${v}">`;
-            });
-            area.appendChild(col);
         }
 
         function fillEditor(data) {
@@ -346,20 +156,41 @@
             });
         }
 
-        function saveAndBuild() {
-            let data = { categories: [] };
+        function generateBoard() {
+            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
             for(let c=1; c<=6; c++) {
-                let cat = { name: document.getElementById('cn-'+c).value, items: [] };
-                [200,400,600,800,1000].forEach(v => {
-                    cat.items.push({ q: document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value, a: document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value });
-                });
-                data.categories.push(cat);
+                let h = document.createElement('div'); h.className='cat-h';
+                h.innerText = document.getElementById('cn-'+c).value || "CAT "+c;
+                grid.appendChild(h);
             }
-            if(rRef) rRef.child('gameData').set(data);
-            buildBoard();
+            [200,400,600,800,1000].forEach(val => {
+                for(let c=1; c<=6; c++) {
+                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${val}"]`).value;
+                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${val}"]`).value;
+                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+val;
+                    cell.onclick = () => { if(q) { 
+                        document.getElementById('q-box').innerText=q; document.getElementById('a-box').innerText=a;
+                        document.getElementById('a-box').style.display='none'; document.getElementById('theater').style.display='flex';
+                        cell.classList.add('used'); if(rRef) rRef.child('currentQuestion').set(q);
+                    }};
+                    grid.appendChild(cell);
+                }
+            });
             document.getElementById('editor-section').style.display = 'none';
         }
+        
+        function initScoreboard(count) {
+            const area = document.getElementById('score-area'); area.innerHTML = "";
+            for(let i=1; i<=count; i++) {
+                let card = document.createElement('div');
+                card.style = "background:#16213e; border:1px solid #ffd700; padding:10px; border-radius:8px; min-width:80px;";
+                card.innerHTML = `Team ${i}<br><span style="font-size:2em;color:#ffd700;" id="s-${i}">0</span>`;
+                area.appendChild(card);
+                rRef.child('scores/team'+i).on('value', s => { document.getElementById('score-'+i).innerText = s.val() || 0; });
+            }
+        }
+        function refreshBoard() { document.querySelectorAll('.cell').forEach(c => c.classList.remove('used')); }
+        function resetBuzzer() { if(rRef) rRef.child('currentBuzz').set(null); }
     </script>
 </body>
 </html>
-
