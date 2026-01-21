@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Diagnostic</title>
+    <title>Trivia Master - Force Run</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
@@ -14,8 +14,8 @@
         .box { background: #222; padding: 10px; border-radius: 8px; border: 1px solid #444; text-align: left; }
         .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; }
         
-        /* System Log for Debugging */
-        #sys-log { background: #000; color: #0f0; font-family: monospace; font-size: 10px; height: 80px; overflow-y: scroll; border: 1px solid #555; padding: 5px; margin-bottom: 10px; }
+        /* Debug Log - High Visibility */
+        #sys-log { background: #000; color: #0f0; font-family: monospace; font-size: 11px; height: 100px; overflow-y: scroll; border: 1px solid #555; padding: 5px; margin-bottom: 10px; }
         
         input, select { width: 95%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; }
         select { background: white; color: black; font-weight: bold; border: 2px solid #00d2ff; }
@@ -29,113 +29,4 @@
         .cell.used { opacity: 0.15; }
         
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
-        #buzzer-ui { background: #e94560; padding: 10px; border-radius: 5px; display: none; text-align: center; font-weight: bold; margin-bottom: 10px; }
-        
-        #theater-buzzer { 
-            display:none; margin-bottom:20px; color:#fff; font-size:1.5em; font-weight:bold; 
-            border: 3px solid #e94560; padding: 15px 30px; border-radius: 10px; background: #e94560; 
-            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
-    </style>
-</head>
-<body>
-
-    <audio id="bg-music" loop><source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg"></audio>
-
-    <div class="sidebar">
-        <div id="sys-log">System initializing...</div>
-
-        <div class="qr-box">
-            <img id="qr-img" style="width: 120px; height: 120px;" alt="QR Code">
-            <div style="font-weight: bold; font-size:12px;">SCAN TO JOIN</div>
-            <input type="text" id="manual-link" value="Loading..." style="font-size:10px; color:black; background:#eee; border:1px solid #ccc;">
-            <a id="qr-link" href="#" target="_blank" style="font-size: 11px; color:blue;">Click to Open Student Page</a>
-        </div>
-
-        <div id="buzzer-ui">
-            🔔 <span id="b-user">---</span><br>
-            <button onclick="resetBuzzer()" style="margin-top:5px; background:white; color:black;">RESET BUZZER</button>
-        </div>
-
-        <div class="box">
-            <strong>1. SETUP</strong>
-            <div style="font-size:11px; color:#aaa;">Room Name:</div>
-            <input type="text" id="r-name" value="Class1">
-            <div style="font-size:11px; color:#aaa;">Teams:</div>
-            <select id="t-count">
-                <option value="2">2 Teams</option>
-                <option value="3" selected>3 Teams</option>
-                <option value="4">4 Teams</option>
-                <option value="5">5 Teams</option>
-            </select>
-            <button class="btn-blue" onclick="connectRoom()">ACTIVATE ROOM</button>
-        </div>
-
-        <div class="box">
-            <strong>2. LESSON</strong>
-            <select id="library-dropdown" style="background:#000; color:#fff;"><option>Scanning...</option></select>
-            <button class="btn-blue" onclick="loadLesson()">LOAD QUESTIONS</button>
-        </div>
-
-        <div class="box">
-            <strong>3. CONTROLS</strong>
-            <button class="btn-green" onclick="shuffleTeams()">SHUFFLE TEAMS</button>
-            <button class="btn-red" onclick="resetScores()">RESET SCORES</button>
-            <button onclick="toggleMusic()" id="music-btn" style="background:#444; color:white;">🎵 MUSIC: OFF</button>
-        </div>
-    </div>
-
-    <div class="main">
-        <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom: 20px;"></div>
-        <div id="main-grid" class="grid"></div>
-        <div id="welcome" style="margin-top:100px; color:#444;"><h1>Trivia Master Board</h1></div>
-    </div>
-
-    <div id="theater">
-        <div id="theater-buzzer">
-            🔔 <span id="th-user">NAME</span> BUZZED!
-            <button onclick="resetBuzzer()" style="margin-left:20px; background:white; color:#e94560; border:none; padding:5px 10px; border-radius:5px; cursor:pointer;">RESET</button>
-        </div>
-        <div id="q-box" style="font-size:2.5em; padding:30px; text-align:center;"></div>
-        <button id="rev-btn" onclick="reveal()" class="btn-blue" style="width:200px;">SHOW ANSWER</button>
-        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px; text-align:center;"></div>
-        <div id="score-ctrls" style="display:none; margin-top:20px;">
-            <div id="team-btns" style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;"></div>
-            <br><button onclick="closeTheater()" style="background:#444; color:white; width:200px;">BACK TO BOARD</button>
-        </div>
-    </div>
-
-    <script>
-        function log(msg, type='info') {
-            const box = document.getElementById('sys-log');
-            const color = type === 'error' ? 'red' : '#0f0';
-            box.innerHTML = `<div style="color:${color};">> ${msg}</div>` + box.innerHTML;
-        }
-
-        window.onerror = function(message, source, lineno, colno, error) {
-            log(`CRITICAL JS ERROR: ${message}`, 'error');
-        };
-
-        const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
-        
-        let db, rRef, teamMax = 3, gameData = null, musicPlaying = false;
-
-        // SAFE STARTUP
-        window.addEventListener('load', () => {
-            log("Window Loaded. Checking URL logic...");
-            
-            // 1. FIX URL GENERATION
-            let currentUrl = window.location.href;
-            let playUrl = "";
-            
-            if (currentUrl.endsWith("index.html")) {
-                playUrl = currentUrl.replace("index.html", "play.html");
-            } else if (currentUrl.endsWith("/")) {
-                playUrl = currentUrl + "play.html";
-            } else {
-                // Determine if we are file:// or http:// and guess
-                let path = window.location.pathname;
-                let dir = path.substring(0, path.lastIndexOf('/'));
-                playUrl = window.location.protocol + "//" + window.location.host + dir + "/play.html";
-            }
+        #buzzer-ui { background: #e94560; padding: 10px; border-radius: 5px; display
