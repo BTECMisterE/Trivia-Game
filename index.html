@@ -1,91 +1,91 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Force Start</title>
+    <title>Trivia Master - Static Pro</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; padding: 20px; }
-        .emergency-start { background: #ff0055; color: white; padding: 30px; font-size: 2em; border: 5px solid white; cursor: pointer; border-radius: 15px; width: 100%; margin-bottom: 20px; font-weight: bold; }
-        .box { background: #111; padding: 20px; border: 2px solid #00d2ff; border-radius: 10px; display: none; } /* Hidden until start */
-        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
-        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; }
-        #log { background: #222; color: #0f0; padding: 10px; font-family: monospace; text-align: left; height: 100px; overflow-y: auto; border: 1px solid #444; margin-top: 10px; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        .box { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; margin-bottom: 20px; }
+        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin: 20px 0; }
+        .cat-h { color: #00d2ff; font-weight: bold; border-bottom: 2px solid #00d2ff; padding: 5px; text-transform: uppercase; }
+        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
+        .cell.used { opacity: 0.15; }
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:1000; flex-direction: column; justify-content: center; align-items: center; }
+        .editor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; text-align: left; }
+        .ed-col { background: #222; padding: 10px; border-radius: 5px; }
+        input { width: 90%; margin-bottom: 5px; background: #000; color: #fff; border: 1px solid #444; padding: 5px; }
+        button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; }
+        #buzzer-ui { background: #e94560; padding: 15px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 2000; border: 2px solid white; }
     </style>
 </head>
 <body>
 
-    <button id="start-btn" class="emergency-start" onclick="forceInitialize()">CLICK HERE TO START SYSTEM</button>
+    <div id="buzzer-ui">🔔 <span id="b-user">---</span> <button onclick="resetBuzzer()">RESET</button></div>
 
-    <div id="game-ui" class="box">
-        <h3>SYSTEM ONLINE</h3>
-        Room: <input type="text" id="r-name" value="Class1" style="padding:10px;">
-        Teams: <input type="number" id="t-count" value="3" style="width:50px; padding:10px;">
-        <button onclick="connectFirebase()" style="background:#00d2ff; padding:10px;">SYNC ROOM</button>
-        
-        <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin:20px 0;"></div>
-        <div id="main-grid" class="grid"></div>
+    <div class="box">
+        Room: <input type="text" id="r-name" value="Class1" style="width:120px;">
+        Teams: <input type="number" id="t-count" value="3" style="width:50px;">
+        <button onclick="connectCloud()" style="background:#00d2ff;">SYNC CLOUD</button>
     </div>
 
-    <div id="log">Log: Click the pink button to activate...</div>
+    <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom:20px;"></div>
+    <div id="main-grid" class="grid"></div>
+
+    <div id="theater">
+        <div id="q-box" style="font-size:2.5em; padding:20px;"></div>
+        <button id="rev-btn" onclick="revealAnswer()" style="padding:15px; background:#00d2ff;">SHOW ANSWER</button>
+        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
+        <div id="score-ctrls" style="display:none; background:rgba(255,255,255,0.1); padding:20px; border-radius:15px; width:80%;">
+            <div id="team-scoring-list"></div>
+            <button onclick="closeTheater()" style="margin-top:20px; background:#444; color:white;">BACK TO BOARD</button>
+        </div>
+    </div>
+
+    <div id="ed-sec" class="box">
+        <h3>BOARD EDITOR</h3>
+        <div class="editor-grid">
+            <div class="ed-col">
+                <input type="text" id="cn-1" placeholder="Category 1">
+                <input type="text" class="qi" data-c="1" data-v="200" placeholder="Q 200">
+                <input type="text" class="ai" data-c="1" data-v="200" placeholder="A 200">
+                <input type="text" class="qi" data-c="1" data-v="400" placeholder="Q 400">
+                <input type="text" class="ai" data-c="1" data-v="400" placeholder="A 400">
+                <input type="text" class="qi" data-c="1" data-v="600" placeholder="Q 600">
+                <input type="text" class="ai" data-c="1" data-v="600" placeholder="A 600">
+            </div>
+            <div class="ed-col">
+                <input type="text" id="cn-2" placeholder="Category 2">
+                <input type="text" class="qi" data-c="2" data-v="200" placeholder="Q 200">
+                <input type="text" class="ai" data-c="2" data-v="200" placeholder="A 200">
+                <input type="text" class="qi" data-c="2" data-v="400" placeholder="Q 400">
+                <input type="text" class="ai" data-c="2" data-v="400" placeholder="A 400">
+                <input type="text" class="qi" data-c="2" data-v="600" placeholder="Q 600">
+                <input type="text" class="ai" data-c="2" data-v="600" placeholder="A 600">
+            </div>
+            </div>
+        <button onclick="buildBoard()" style="background:#28a745; color:white; width:100%; margin-top:15px; padding:15px;">BUILD BOARD</button>
+    </div>
 
     <script>
-        function log(msg) {
-            const l = document.getElementById('log');
-            l.innerHTML = "> " + msg + "<br>" + l.innerHTML;
-        }
+        const config = {
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
 
-        // FORCE START - This wakes up the browser
-        function forceInitialize() {
-            log("Activating System...");
-            document.getElementById('start-btn').style.display = 'none';
-            document.getElementById('game-ui').style.display = 'block';
+        let rRef, currentPoints, teamMax;
+
+        function connectCloud() {
+            if (!firebase.apps.length) firebase.initializeApp(config);
+            const room = document.getElementById('r-name').value;
+            teamMax = document.getElementById('t-count').value;
+            rRef = firebase.database().ref('rooms/' + room);
             
-            // Build the empty categories immediately
-            const grid = document.getElementById('main-grid');
-            for(let i=1; i<=6; i++) {
-                let h = document.createElement('div');
-                h.innerHTML = "<b>CAT "+i+"</b>";
-                grid.appendChild(h);
-            }
-            log("UI Activated. Enter room name and click SYNC.");
-        }
-
-        function connectFirebase() {
-            log("Connecting to Firebase...");
-            const config = {
-                apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-                authDomain: "trivia-game-3fe59.firebaseapp.com",
-                databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-                projectId: "trivia-game-3fe59",
-                appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
-            };
-
-            try {
-                if (!firebase.apps.length) firebase.initializeApp(config);
-                const db = firebase.database();
-                const room = document.getElementById('r-name').value;
-                const teams = document.getElementById('t-count').value;
-                
-                const rRef = db.ref('rooms/' + room);
-                
-                // Build Scoreboard
-                const area = document.getElementById('score-area'); area.innerHTML = "";
-                for(let i=1; i<=teams; i++) {
-                    let d = document.createElement('div');
-                    d.style = "background:#16213e; padding:10px; border:1px solid #ffd700; border-radius:5px; min-width:80px;";
-                    d.innerHTML = `Team ${i}<br><span id="s-${i}" style="font-size:1.5em;color:#ffd700;">0</span>`;
-                    area.appendChild(d);
-                    rRef.child('scores/team'+i).on('value', s => { 
-                        document.getElementById('s-'+i).innerText = s.val() || 0; 
-                    });
-                }
-                log("CONNECTED TO CLOUD: " + room);
-                alert("Cloud Connection Successful!");
-            } catch(e) {
-                log("CRITICAL ERROR: " + e.message);
-            }
-        }
-    </script>
-</body>
-</html>
+            const sArea = document.getElementById('score-area'); sArea.innerHTML = "";
+            for(let i=1; i<=teamMax; i++) {
+                let d = document.createElement('div');
+                d.style = "background:#16213e; padding:10px; border:1px solid #ffd700; border-radius:8px; min-width:80px;";
+                d.innerHTML = `Team
