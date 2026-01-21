@@ -1,67 +1,124 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Play - Debug Mode</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trivia Master - Static Hub</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
-        .card { background: #111; padding: 20px; border-radius: 15px; border: 2px solid #00d2ff; max-width: 400px; margin: 0 auto; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
         
-        /* Debug Console Box */
-        #console-log {
-            width: 100%; height: 100px; background: #000; color: #0f0; 
-            font-family: monospace; font-size: 12px; text-align: left; 
-            padding: 10px; border: 1px solid #555; overflow-y: scroll;
-            margin-bottom: 20px; display: block;
-        }
-
-        input, select { width: 90%; padding: 12px; margin: 10px 0; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 16px; }
-        button { cursor: pointer; padding: 15px; width: 95%; border-radius: 8px; font-weight: bold; border: none; font-size: 1.1em; margin-top: 10px; }
+        /* Sidebar */
+        .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
+        
+        .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; text-align: left; }
+        .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
+        
+        input, select { width: 92%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; }
+        button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
+        .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
-        .btn-gray { background: #444; color: white; }
+        .btn-red { background: #e94560; color: white; } /* New Red Button Style */
         
-        #buzzer { 
-            width: 250px; height: 250px; background: radial-gradient(#ff0055, #80002b);
-            border-radius: 50%; border: 8px solid white; color: white; font-size: 3em;
-            font-weight: bold; cursor: pointer; margin: 40px auto; display: none;
-        }
-        #buzzer:disabled { background: #444; opacity: 0.5; }
+        /* Grid & Theater */
+        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
+        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; display: flex; align-items: center; justify-content: center; }
+        .cell.used { opacity: 0.15; }
+        
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
+        #buzzer-ui { background: #e94560; padding: 10px; border-radius: 5px; display: none; text-align: center; font-weight: bold; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <div id="console-log">System initializing...</div>
+    <audio id="bg-music" loop><source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg"></audio>
 
-    <div id="join-sec" class="card">
-        <h2>STUDENT JOIN</h2>
-        <input type="text" id="p-name" placeholder="Enter Name">
-        <select id="room-list"><option value="">-- Initializing... --</option></select>
-        <button id="btn-refresh" class="btn-gray">🔄 Force Refresh List</button>
-        <button id="btn-join" class="btn-green">JOIN GAME</button>
+    <div class="sidebar">
+        <div class="qr-box">
+            <img id="qr-img" style="width: 150px; height: 150px;" alt="QR Code Loading...">
+            <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN HUB</div>
+            <div style="font-size: 11px; color: #555;">Directs to play.html</div>
+        </div>
+
+        <div id="buzzer-ui">
+            🔔 <span id="b-user">---</span><br>
+            <button onclick="resetBuzzer()" style="margin-top:5px; background:white; color:black;">RESET</button>
+        </div>
+
+        <div class="box">
+            <strong>1. CREATE ROOM</strong>
+            <input type="text" id="r-name" value="Class1">
+            <button class="btn-blue" onclick="connectRoom()">ACTIVATE ROOM</button>
+            <div id="status-msg" style="color: yellow; font-size: 12px; margin-top: 5px;">Status: Offline</div>
+        </div>
+
+        <div class="box">
+            <strong>2. LOAD LESSON</strong>
+            <select id="library-dropdown"><option>Scanning Library...</option></select>
+            <button class="btn-blue" onclick="loadLesson()">LOAD QUESTIONS</button>
+        </div>
+
+        <div class="box">
+            <strong>3. CONTROLS</strong>
+            <button class="btn-green" onclick="shuffleTeams()">SHUFFLE TEAMS</button>
+            <button class="btn-red" onclick="resetScores()">RESET SCORES</button>
+            <button onclick="toggleMusic()" id="music-btn" style="background:#444; color:white;">🎵 MUSIC: OFF</button>
+        </div>
     </div>
 
-    <div id="play-sec" style="display:none;">
-        <h3><span id="t-display">Waiting for Team...</span></h3>
-        <button id="buzzer" onclick="buzz()">BUZZ!</button>
-        <div id="msg-box" style="color:yellow; margin-top:10px;"></div>
+    <div class="main">
+        <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom: 20px;"></div>
+        <div id="main-grid" class="grid"></div>
+        
+        <div id="welcome" style="margin-top:100px; color:#444;">
+            <h1>Trivia Master</h1>
+            <p>1. Activate Room &nbsp;|&nbsp; 2. Load Questions &nbsp;|&nbsp; 3. Play</p>
+        </div>
+    </div>
+
+    <div id="theater">
+        <div id="q-box" style="font-size:2.5em; padding:30px; text-align:center;"></div>
+        <button id="rev-btn" onclick="reveal()" class="btn-blue" style="width:200px;">SHOW ANSWER</button>
+        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px; text-align:center;"></div>
+        <div id="score-ctrls" style="display:none; margin-top:20px;">
+            <div id="team-btns" style="display:flex; gap:10px; justify-content:center;"></div>
+            <br>
+            <button onclick="closeTheater()" style="background:#444; color:white; width:200px;">BACK TO BOARD</button>
+        </div>
     </div>
 
     <script>
-        // --- 1. OVERRIDE CONSOLE LOGGING ---
-        function log(msg, type='info') {
-            const box = document.getElementById('console-log');
-            const color = type === 'error' ? 'red' : '#0f0';
-            box.innerHTML = `<div style="color:${color}; border-bottom:1px solid #333;">> ${msg}</div>` + box.innerHTML;
-        }
-        
-        window.onerror = function(message, source, lineno, colno, error) {
-            log(`CRITICAL ERROR: ${message}`, 'error');
-        };
-
-        // --- 2. STARTUP SEQUENCE ---
-        let db, rRef;
         const config = {
             apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-            authDomain:
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
+        firebase.initializeApp(config);
+        const db = firebase.database();
+        let rRef, teamMax = 3, gameData = null, musicPlaying = false;
+
+        // --- 1. GENERATE STATIC QR ON LOAD ---
+        window.onload = function() {
+            const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + "/play.html";
+            const qrUrl = `https://chart.googleapis.com/chart?chs=150x150&cht=qr&chl=${encodeURIComponent(baseUrl)}`;
+            document.getElementById('qr-img').src = qrUrl;
+        };
+
+        // --- 2. CORE FUNCTIONS ---
+        function connectRoom() {
+            const room = document.getElementById('r-name').value;
+            rRef = db.ref('rooms/' + room);
+            
+            // Mark Active for Student Dropdown
+            rRef.child('metadata').set({ status: 'active', lastActive: Date.now() });
+            rRef.child('metadata').onDisconnect().remove();
+
+            document.getElementById('status-msg').innerText = "✅ Active: " + room;
+            document.getElementById('status-msg').style.color = "#0f0";
+            
+            setupListeners();
+        }
+
+        function loadLesson
