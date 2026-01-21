@@ -28,4 +28,210 @@
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
         .btn-purple { background: #6f42c1; color: white; }
-        #buzzer-ui { background: #e94560; padding: 15px; position: fixed; top: 10px; left: 25
+        #buzzer-ui { background: #e94560; padding: 15px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 2000; border: 2px solid white; }
+    </style>
+</head>
+<body>
+
+    <div id="buzzer-ui">🔔 <span id="b-user">---</span> <button onclick="resetBuzzer()" style="margin-left:10px;">RESET</button></div>
+
+    <div class="box">
+        <strong>1. SESSION:</strong> 
+        Room: <input type="text" id="r-name" value="Class1" style="width:100px;">
+        Teams: <input type="number" id="t-count" value="3" style="width:40px;">
+        <button class="btn-blue" onclick="connectCloud()">CONNECT</button>
+        <button onclick="document.getElementById('ed-sec').style.display='block'" style="background:#444; color:white;">EDITOR</button>
+    </div>
+
+    <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom:20px;"></div>
+    <div id="main-grid" class="grid"></div>
+
+    <div id="theater">
+        <div id="daily-double-msg">DAILY DOUBLE!</div>
+        <div id="wager-area" style="display:none; margin-bottom:20px;">
+            WAGER: <input type="number" id="wager-input" style="width:120px; font-size:1.5em; text-align:center;">
+            <button onclick="lockWager()" class="btn-blue">LOCK WAGER</button>
+        </div>
+        <div id="q-box" style="font-size:2.5em; padding:20px;"></div>
+        <button id="rev-btn" onclick="revealAnswer()" class="btn-blue">SHOW ANSWER</button>
+        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
+        
+        <div id="score-ctrls" style="display:none;" class="scoring-panel">
+            <div id="team-scoring-list"></div>
+            <button onclick="closeTheater()" style="margin-top:20px; background:#444; color:white;">BACK TO BOARD</button>
+        </div>
+    </div>
+
+    <div id="ed-sec" class="box">
+        <h3>2. LIBRARY & EDITOR</h3>
+        <div style="background:#222; padding:10px; margin-bottom:15px; border-radius:5px;">
+            <select id="library-dropdown" onchange="document.getElementById('lesson-name').value = this.value" style="width:200px;">
+                <option value="">-- Scanning Cloud... --</option>
+            </select>
+            <button class="btn-blue" onclick="loadGame()">📂 LOAD</button>
+            <input type="text" id="lesson-name" placeholder="Save Name" style="width:120px; margin-left:10px;">
+            <button class="btn-purple" onclick="saveGame()">💾 SAVE</button>
+        </div>
+        <div class="editor-grid" id="editor-body"></div>
+        <button class="btn-green" onclick="buildBoard()" style="width:100%; margin-top:15px; padding:15px; font-size:1.2em;">3. BUILD BOARD</button>
+    </div>
+
+    <script>
+        const config = {
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(config);
+        const db = firebase.database();
+        let rRef, curVal, teamMax, ddIndex;
+        const vals = [200, 400, 600, 800, 1000];
+
+        // Scanner
+        db.ref('library').on('value', s => {
+            const drop = document.getElementById('library-dropdown');
+            drop.innerHTML = '<option value="">-- Select Lesson --</option>';
+            s.forEach(child => {
+                let opt = document.createElement('option'); opt.value = child.key; opt.innerText = child.key;
+                drop.appendChild(opt);
+            });
+        });
+
+        // Editor
+        const eb = document.getElementById('editor-body');
+        for(let c=1; c<=6; c++) {
+            let col = document.createElement('div'); col.className = 'ed-col';
+            col.innerHTML = `<strong>CAT ${c}</strong><br><input type="text" id="cn-${c}" placeholder="Category">`;
+            vals.forEach(v => {
+                col.innerHTML += `<input type="text" class="qi" data-c="${c}" data-v="${v}" placeholder="Q $${v}"><input type="text" class="ai" data-c="${c}" data-v="${v}" placeholder="A $${v}">`;
+            });
+            eb.appendChild(col);
+        }
+
+        function connectCloud() {
+            const room = document.getElementById('r-name').value;
+            teamMax = document.getElementById('t-count').value;
+            rRef = db.ref('rooms/' + room);
+            const sArea = document.getElementById('score-area'); sArea.innerHTML = "";
+            for(let i=1; i<=teamMax; i++) {
+                let d = document.createElement('div'); d.style = "background:#16213e; padding:10px; border:1px solid #ffd700; border-radius:8px; min-width:80px;";
+                d.innerHTML = `Team ${i}<br><span id="ts-${i}" style="font-size:1.5em;color:#ffd700;">0</span>`;
+                sArea.appendChild(d);
+                rRef.child('scores/team'+i).on('value', s => { document.getElementById('ts-'+i).innerText = s.val() || 0; });
+            }
+            rRef.child('currentBuzz').on('value', s => {
+                const v = s.val(); document.getElementById('buzzer-ui').style.display = v ? 'block' : 'none';
+                if(v) document.getElementById('b-user').innerText = v.user + " (Team " + v.team + ")";
+            });
+            alert("Connected!");
+        }
+
+        function buildBoard() {
+            ddIndex = Math.floor(Math.random() * 30);
+            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
+            for(let c=1; c<=6; c++) {
+                let h = document.createElement('div'); h.className='cat-h'; h.innerText = document.getElementById('cn-'+c).value || "CAT "+c;
+                grid.appendChild(h);
+            }
+            let counter = 0;
+            vals.forEach(v => {
+                for(let c=1; c<=6; c++) {
+                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value;
+                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value;
+                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+v;
+                    let myIdx = counter;
+                    cell.onclick = () => { if(q) launch(q, a, v, cell, myIdx); };
+                    grid.appendChild(cell);
+                    counter++;
+                }
+            });
+            document.getElementById('ed-sec').style.display = 'none';
+        }
+
+        function launch(q, a, v, cell, idx) {
+            curVal = v;
+            document.getElementById('theater').style.display = 'flex';
+            document.getElementById('a-box').innerText = a;
+            document.getElementById('a-box').style.display = 'none';
+            document.getElementById('score-ctrls').style.display = 'none';
+            cell.classList.add('used');
+
+            if(idx === ddIndex) {
+                document.getElementById('daily-double-msg').style.display = 'block';
+                document.getElementById('wager-area').style.display = 'block';
+                document.getElementById('q-box').style.display = 'none';
+                document.getElementById('rev-btn').style.display = 'none';
+                document.getElementById('q-box').innerText = "DAILY DOUBLE: " + q;
+            } else {
+                document.getElementById('daily-double-msg').style.display = 'none';
+                document.getElementById('wager-area').style.display = 'none';
+                document.getElementById('q-box').style.display = 'block';
+                document.getElementById('q-box').innerText = q;
+                document.getElementById('rev-btn').style.display = 'block';
+            }
+            if(rRef) rRef.child('currentQuestion').set(q);
+        }
+
+        function lockWager() {
+            curVal = parseInt(document.getElementById('wager-input').value) || 0;
+            document.getElementById('wager-area').style.display = 'none';
+            document.getElementById('daily-double-msg').style.display = 'none';
+            document.getElementById('q-box').style.display = 'block';
+            document.getElementById('rev-btn').style.display = 'block';
+        }
+
+        function revealAnswer() {
+            document.getElementById('a-box').style.display = 'block';
+            document.getElementById('rev-btn').style.display = 'none';
+            const list = document.getElementById('team-scoring-list'); list.innerHTML = `<h4>AWARD $${curVal}</h4>`;
+            for(let i=1; i<=teamMax; i++) {
+                list.innerHTML += `<div class="team-row"><span>Team ${i}</span><div>
+                    <button onclick="modScore(${i}, ${curVal})" style="background:green; color:white;">+</button>
+                    <button onclick="modScore(${i}, -${curVal})" style="background:red; color:white;">-</button>
+                </div></div>`;
+            }
+            document.getElementById('score-ctrls').style.display = 'block';
+        }
+
+        function modScore(t, amt) {
+            const el = document.getElementById('ts-'+t);
+            rRef.child('scores/team'+t).set(parseInt(el.innerText) + amt);
+        }
+
+        function saveGame() {
+            const name = document.getElementById('lesson-name').value.trim();
+            if(!name) return alert("Name required!");
+            let data = { categories: [] };
+            for(let c=1; c<=6; c++) {
+                let cat = { name: document.getElementById('cn-'+c).value, items: [] };
+                vals.forEach(v => {
+                    cat.items.push({ q: document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value, a: document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value });
+                });
+                data.categories.push(cat);
+            }
+            db.ref('library/' + name).set(data).then(() => alert("Saved!"));
+        }
+
+        function loadGame() {
+            const name = document.getElementById('library-dropdown').value;
+            db.ref('library/' + name).once('value', s => {
+                const data = s.val();
+                data.categories.forEach((cat, i) => {
+                    const cId = i + 1; document.getElementById(`cn-${cId}`).value = cat.name;
+                    cat.items.forEach((item, j) => {
+                        document.querySelector(`.qi[data-c="${cId}"][data-v="${vals[j]}"]`).value = item.q;
+                        document.querySelector(`.ai[data-c="${cId}"][data-v="${vals[j]}"]`).value = item.a;
+                    });
+                });
+                alert("Loaded!");
+            });
+        }
+
+        function closeTheater() { document.getElementById('theater').style.display = 'none'; resetBuzzer(); if(rRef) rRef.child('currentQuestion').set(null); }
+        function resetBuzzer() { if(rRef) rRef.child('currentBuzz').set(null); }
+    </script>
+</body>
+</html>
