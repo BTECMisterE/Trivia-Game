@@ -64,4 +64,119 @@
         let db, rRef;
         const config = {
             apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-            authDomain:
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            log("DOM Loaded. Checking Firebase...");
+            
+            if (typeof firebase === 'undefined') {
+                log("ERROR: Firebase libraries failed to load! Check internet connection or ad-blockers.", 'error');
+                return;
+            }
+
+            try {
+                firebase.initializeApp(config);
+                db = firebase.database();
+                log("Firebase Connected. Scanning rooms...");
+                scanRooms();
+                
+                // Attach Button Listeners manually to ensure they work
+                document.getElementById('btn-refresh').addEventListener('click', scanRooms);
+                document.getElementById('btn-join').addEventListener('click', joinGame);
+                
+            } catch(e) {
+                log(`Init Error: ${e.message}`, 'error');
+            }
+        });
+
+        function scanRooms() {
+            log("Scanning for active rooms...");
+            const drop = document.getElementById('room-list');
+            drop.innerHTML = '<option>Scanning...</option>';
+            
+            db.ref('rooms').once('value', s => {
+                drop.innerHTML = '<option value="">-- Select Room --</option>';
+                let count = 0;
+                s.forEach(child => {
+                    const d = child.val();
+                    // We check if metadata exists
+                    if(d.metadata && d.metadata.status === 'active') {
+                        let opt = document.createElement('option');
+                        opt.value = child.key; opt.innerText = child.key;
+                        drop.appendChild(opt);
+                        count++;
+                    }
+                });
+                if(count === 0) {
+                    log("Scan complete. No active rooms found.");
+                    drop.innerHTML = '<option>No Active Rooms</option>';
+                } else {
+                    log(`Scan complete. Found ${count} rooms.`);
+                }
+            }, err => {
+                log(`Database Permission Error: ${err.message}`, 'error');
+            });
+        }
+
+        function joinGame() {
+            const name = document.getElementById('p-name').value;
+            const room = document.getElementById('room-list').value;
+            
+            if(!name || !room || room.includes("Select") || room.includes("No Active")) {
+                log("Error: Invalid Name or Room selected.", 'error');
+                return alert("Check name and room!");
+            }
+
+            log(`Joining ${room} as ${name}...`);
+            document.getElementById('join-sec').style.display = 'none';
+            document.getElementById('play-sec').style.display = 'block';
+            
+            rRef = db.ref('rooms/' + room);
+            const myId = name + "_" + Math.floor(Math.random()*1000);
+            
+            rRef.child('players/' + myId).set({ name: name, team: 0 })
+                .then(() => log("Player registered in DB."))
+                .catch(e => log(`Save Error: ${e.message}`, 'error'));
+            
+            rRef.child('players/' + myId).onDisconnect().remove();
+
+            // Listen for Team
+            rRef.child('players/' + myId + '/team').on('value', s => {
+                const t = s.val();
+                document.getElementById('t-display').innerText = (t && t > 0) ? "TEAM " + t : "Wait for Shuffle...";
+                log(`Team update: ${t}`);
+            });
+
+            // Listen for Buzzer
+            rRef.child('currentBuzz').on('value', s => {
+                const btn = document.getElementById('buzzer');
+                const v = s.val();
+                if(v) {
+                    btn.disabled = true;
+                    btn.style.background = "#444";
+                    document.getElementById('msg-box').innerText = (v.user === name) ? "YOU BUZZED!" : v.user + " buzzed!";
+                } else {
+                    btn.disabled = false;
+                    btn.style.background = "radial-gradient(#ff0055, #80002b)";
+                    document.getElementById('msg-box').innerText = "";
+                }
+            });
+            document.getElementById('buzzer').style.display = 'block';
+        }
+
+        function buzz() {
+            const name = document.getElementById('p-name').value;
+            const tTxt = document.getElementById('t-display').innerText;
+            if(tTxt.includes("Wait")) return alert("Wait for team assignment!");
+            
+            rRef.child('currentBuzz').transaction(curr => {
+                return (curr === null) ? { user: name, team: tTxt } : undefined;
+            });
+        }
+    </script>
+</body>
+</html>
