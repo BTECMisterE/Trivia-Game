@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Play - Smart Join</title>
+    <title>Trivia Play - Debug Mode</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
@@ -9,79 +9,59 @@
         body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
         .card { background: #111; padding: 20px; border-radius: 15px; border: 2px solid #00d2ff; max-width: 400px; margin: 0 auto; }
         
+        /* Debug Console Box */
+        #console-log {
+            width: 100%; height: 100px; background: #000; color: #0f0; 
+            font-family: monospace; font-size: 12px; text-align: left; 
+            padding: 10px; border: 1px solid #555; overflow-y: scroll;
+            margin-bottom: 20px; display: block;
+        }
+
         input, select { width: 90%; padding: 12px; margin: 10px 0; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 16px; }
-        
         button { cursor: pointer; padding: 15px; width: 95%; border-radius: 8px; font-weight: bold; border: none; font-size: 1.1em; margin-top: 10px; }
-        .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
-        .btn-gray { background: #444; color: white; font-size: 0.9em; padding: 10px; }
+        .btn-gray { background: #444; color: white; }
         
         #buzzer { 
             width: 250px; height: 250px; background: radial-gradient(#ff0055, #80002b);
             border-radius: 50%; border: 8px solid white; color: white; font-size: 3em;
             font-weight: bold; cursor: pointer; margin: 40px auto; display: none;
-            box-shadow: 0 0 30px rgba(255, 0, 85, 0.5);
-            -webkit-tap-highlight-color: transparent;
         }
-        #buzzer:active { transform: scale(0.95); background: #80002b; }
-        #buzzer:disabled { background: #444; border-color: #666; opacity: 0.5; cursor: not-allowed; box-shadow: none; }
-
-        .status-bar { background: #222; padding: 10px; border-radius: 5px; margin-bottom: 20px; font-size: 0.9em; color: #aaa; }
-        #msg-box { font-size: 1.2em; color: #ffd700; min-height: 30px; margin-top: 10px; }
+        #buzzer:disabled { background: #444; opacity: 0.5; }
     </style>
 </head>
 <body>
 
+    <div id="console-log">System initializing...</div>
+
     <div id="join-sec" class="card">
-        <h2>STUDENT LOGIN</h2>
-        
-        <label style="display:block; text-align:left; margin-left:5%;">Your Name:</label>
+        <h2>STUDENT JOIN</h2>
         <input type="text" id="p-name" placeholder="Enter Name">
-        
-        <label style="display:block; text-align:left; margin-left:5%;">Select Room:</label>
-        <select id="room-list">
-            <option value="">-- Scanning for Teacher... --</option>
-        </select>
-        <button onclick="scanRooms()" class="btn-gray">🔄 Refresh List</button>
-        
-        <hr style="border:0; border-top:1px solid #333; margin:20px 0;">
-        <button onclick="joinGame()" class="btn-green">JOIN GAME</button>
+        <select id="room-list"><option value="">-- Initializing... --</option></select>
+        <button id="btn-refresh" class="btn-gray">🔄 Force Refresh List</button>
+        <button id="btn-join" class="btn-green">JOIN GAME</button>
     </div>
 
     <div id="play-sec" style="display:none;">
-        <div class="status-bar">
-            Room: <span id="r-display" style="color:#fff;">--</span> | 
-            <span id="t-display" style="color:#00d2ff; font-weight:bold;">Assigning Team...</span>
-        </div>
-        
-        <div id="msg-box">Waiting for question...</div>
+        <h3><span id="t-display">Waiting for Team...</span></h3>
         <button id="buzzer" onclick="buzz()">BUZZ!</button>
+        <div id="msg-box" style="color:yellow; margin-top:10px;"></div>
     </div>
 
     <script>
+        // --- 1. OVERRIDE CONSOLE LOGGING ---
+        function log(msg, type='info') {
+            const box = document.getElementById('console-log');
+            const color = type === 'error' ? 'red' : '#0f0';
+            box.innerHTML = `<div style="color:${color}; border-bottom:1px solid #333;">> ${msg}</div>` + box.innerHTML;
+        }
+        
+        window.onerror = function(message, source, lineno, colno, error) {
+            log(`CRITICAL ERROR: ${message}`, 'error');
+        };
+
+        // --- 2. STARTUP SEQUENCE ---
+        let db, rRef;
         const config = {
             apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-            authDomain: "trivia-game-3fe59.firebaseapp.com",
-            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-            projectId: "trivia-game-3fe59",
-            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
-        };
-        firebase.initializeApp(config);
-        const db = firebase.database();
-        let rRef, myId;
-
-        // Auto-scan on load
-        window.onload = scanRooms;
-
-        function scanRooms() {
-            const drop = document.getElementById('room-list');
-            drop.innerHTML = '<option value="">-- Scanning... --</option>';
-            
-            db.ref('rooms').once('value', s => {
-                drop.innerHTML = '<option value="">-- Select Room --</option>';
-                let found = false;
-                
-                s.forEach(child => {
-                    const data = child.val();
-                    // Check if room has metadata AND status is active
-                    if(data.metadata && data.metadata.
+            authDomain:
