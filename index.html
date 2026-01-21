@@ -1,45 +1,40 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master Board</title>
+    <title>Trivia Master - Diagnostic</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
         
         /* Sidebar */
-        .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        .sidebar { width: 340px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
         .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
         
-        .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; text-align: left; }
-        .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px; min-height: 180px; }
+        .box { background: #222; padding: 10px; border-radius: 8px; border: 1px solid #444; text-align: left; }
+        .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; }
         
-        /* Inputs */
-        input { width: 92%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; }
-        select { width: 100%; padding: 8px; margin: 5px 0; border-radius: 4px; background: white; color: black; font-weight: bold; border: 2px solid #00d2ff; }
+        /* System Log for Debugging */
+        #sys-log { background: #000; color: #0f0; font-family: monospace; font-size: 10px; height: 80px; overflow-y: scroll; border: 1px solid #555; padding: 5px; margin-bottom: 10px; }
         
-        /* Buttons */
+        input, select { width: 95%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; }
+        select { background: white; color: black; font-weight: bold; border: 2px solid #00d2ff; }
         button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
         .btn-red { background: #e94560; color: white; }
         
-        /* Grid */
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
         .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; display: flex; align-items: center; justify-content: center; }
         .cell.used { opacity: 0.15; }
         
-        /* Theater Overlay */
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
-        
-        /* Buzzers */
         #buzzer-ui { background: #e94560; padding: 10px; border-radius: 5px; display: none; text-align: center; font-weight: bold; margin-bottom: 10px; }
         
         #theater-buzzer { 
             display:none; margin-bottom:20px; color:#fff; font-size:1.5em; font-weight:bold; 
             border: 3px solid #e94560; padding: 15px 30px; border-radius: 10px; background: #e94560; 
             animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            box-shadow: 0 0 20px rgba(233, 69, 96, 0.6);
         }
         @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
     </style>
@@ -49,13 +44,13 @@
     <audio id="bg-music" loop><source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg"></audio>
 
     <div class="sidebar">
+        <div id="sys-log">System initializing...</div>
+
         <div class="qr-box">
-            <img id="qr-img" style="width: 150px; height: 150px;" alt="QR will appear here">
-            <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN</div>
-            <div style="font-size: 11px; margin-top:5px;">
-                <a id="qr-link" href="#" target="_blank" style="color:blue;">Or Click Here</a>
-                <br><span style="cursor:pointer; color:#555; text-decoration:underline;" onclick="forceGenQR()">Retry QR</span>
-            </div>
+            <img id="qr-img" style="width: 120px; height: 120px;" alt="QR Code">
+            <div style="font-weight: bold; font-size:12px;">SCAN TO JOIN</div>
+            <input type="text" id="manual-link" value="Loading..." style="font-size:10px; color:black; background:#eee; border:1px solid #ccc;">
+            <a id="qr-link" href="#" target="_blank" style="font-size: 11px; color:blue;">Click to Open Student Page</a>
         </div>
 
         <div id="buzzer-ui">
@@ -64,26 +59,22 @@
         </div>
 
         <div class="box">
-            <strong>1. SETUP ROOM</strong>
-            <div style="margin-bottom:5px; color:#ccc; font-size:12px;">Room Name:</div>
+            <strong>1. SETUP</strong>
+            <div style="font-size:11px; color:#aaa;">Room Name:</div>
             <input type="text" id="r-name" value="Class1">
-
-            <div style="margin-top:10px; margin-bottom:5px; color:#ccc; font-size:12px;">How many Teams?</div>
+            <div style="font-size:11px; color:#aaa;">Teams:</div>
             <select id="t-count">
                 <option value="2">2 Teams</option>
                 <option value="3" selected>3 Teams</option>
                 <option value="4">4 Teams</option>
                 <option value="5">5 Teams</option>
-                <option value="6">6 Teams</option>
             </select>
-
             <button class="btn-blue" onclick="connectRoom()">ACTIVATE ROOM</button>
-            <div id="status-msg" style="color: yellow; font-size: 12px; margin-top: 5px;">Status: Offline</div>
         </div>
 
         <div class="box">
             <strong>2. LESSON</strong>
-            <select id="library-dropdown" style="background:#000; color:#fff;"><option>Scanning Library...</option></select>
+            <select id="library-dropdown" style="background:#000; color:#fff;"><option>Scanning...</option></select>
             <button class="btn-blue" onclick="loadLesson()">LOAD QUESTIONS</button>
         </div>
 
@@ -106,11 +97,9 @@
             🔔 <span id="th-user">NAME</span> BUZZED!
             <button onclick="resetBuzzer()" style="margin-left:20px; background:white; color:#e94560; border:none; padding:5px 10px; border-radius:5px; cursor:pointer;">RESET</button>
         </div>
-
         <div id="q-box" style="font-size:2.5em; padding:30px; text-align:center;"></div>
         <button id="rev-btn" onclick="reveal()" class="btn-blue" style="width:200px;">SHOW ANSWER</button>
         <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px; text-align:center;"></div>
-        
         <div id="score-ctrls" style="display:none; margin-top:20px;">
             <div id="team-btns" style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;"></div>
             <br><button onclick="closeTheater()" style="background:#444; color:white; width:200px;">BACK TO BOARD</button>
@@ -118,85 +107,35 @@
     </div>
 
     <script>
+        function log(msg, type='info') {
+            const box = document.getElementById('sys-log');
+            const color = type === 'error' ? 'red' : '#0f0';
+            box.innerHTML = `<div style="color:${color};">> ${msg}</div>` + box.innerHTML;
+        }
+
+        window.onerror = function(message, source, lineno, colno, error) {
+            log(`CRITICAL JS ERROR: ${message}`, 'error');
+        };
+
         const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
-        firebase.initializeApp(config);
-        const db = firebase.database();
-        let rRef, teamMax = 3, gameData = null, musicPlaying = false;
+        
+        let db, rRef, teamMax = 3, gameData = null, musicPlaying = false;
 
-        // Try to generate QR immediately on load
-        window.addEventListener('load', forceGenQR);
-
-        function forceGenQR() {
-            const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + "/play.html";
-            document.getElementById('qr-link').href = baseUrl;
-            document.getElementById('qr-link').innerText = "Click to open Student Link";
-            // Using QRServer as it's more reliable than Google Charts for local files
-            document.getElementById('qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(baseUrl)}`;
-        }
-
-        function connectRoom() {
-            // Force QR Gen just in case
-            forceGenQR();
+        // SAFE STARTUP
+        window.addEventListener('load', () => {
+            log("Window Loaded. Checking URL logic...");
             
-            const room = document.getElementById('r-name').value;
-            teamMax = parseInt(document.getElementById('t-count').value) || 3;
-
-            rRef = db.ref('rooms/' + room);
-            rRef.child('metadata').set({ status: 'active', lastActive: Date.now() });
-            rRef.child('metadata').onDisconnect().remove();
+            // 1. FIX URL GENERATION
+            let currentUrl = window.location.href;
+            let playUrl = "";
             
-            document.getElementById('status-msg').innerText = "✅ Active: " + room;
-            document.getElementById('status-msg').style.color = "#0f0";
-            
-            setupListeners();
-        }
-
-        function loadLesson() {
-            const name = document.getElementById('library-dropdown').value;
-            if(!name || name.includes("Scanning")) return alert("Select a lesson.");
-            db.ref('library/' + name).once('value', s => {
-                gameData = s.val();
-                document.getElementById('welcome').style.display = 'none';
-                buildBoard();
-            });
-        }
-
-        function buildBoard() {
-            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
-            gameData.categories.forEach(cat => {
-                let h = document.createElement('div'); h.style.color="#00d2ff"; h.style.fontWeight="bold"; h.innerText = cat.name; grid.appendChild(h);
-            });
-            for(let r=0; r<5; r++) {
-                gameData.categories.forEach(cat => {
-                    const item = cat.items[r];
-                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+(200*(r+1));
-                    cell.onclick = () => {
-                        document.getElementById('q-box').innerText = item.q;
-                        document.getElementById('a-box').innerText = item.a;
-                        document.getElementById('theater').style.display = 'flex';
-                        document.getElementById('a-box').style.display = 'none';
-                        document.getElementById('rev-btn').style.display = 'block';
-                        document.getElementById('score-ctrls').style.display = 'none';
-                        if(musicPlaying) document.getElementById('bg-music').volume = 0.05;
-                        cell.classList.add('used');
-                    };
-                    grid.appendChild(cell);
-                });
+            if (currentUrl.endsWith("index.html")) {
+                playUrl = currentUrl.replace("index.html", "play.html");
+            } else if (currentUrl.endsWith("/")) {
+                playUrl = currentUrl + "play.html";
+            } else {
+                // Determine if we are file:// or http:// and guess
+                let path = window.location.pathname;
+                let dir = path.substring(0, path.lastIndexOf('/'));
+                playUrl = window.location.protocol + "//" + window.location.host + dir + "/play.html";
             }
-        }
-
-        function reveal() {
-            document.getElementById('a-box').style.display = 'block';
-            document.getElementById('rev-btn').style.display = 'none';
-            document.getElementById('score-ctrls').style.display = 'block';
-            const area = document.getElementById('team-btns'); area.innerHTML = "";
-            for(let i=1; i<=teamMax; i++) {
-                area.innerHTML += `<div style="background:#333; padding:5px; border-radius:5px; margin:2px;">
-                    Team ${i} <button onclick="addScore(${i}, 200)" style="background:green; color:white; width:30px;">+</button>
-                </div>`;
-            }
-        }
-
-        function addScore(t, amt) {
-            const el = document.getElementById('ts-'+t);
-            rRef.child('scores/team'+t).set(parseInt(el.innerText) + amt);
