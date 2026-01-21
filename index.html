@@ -70,7 +70,6 @@
     <script>
         const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
         
-        // Initialize Firebase immediately
         firebase.initializeApp(config);
         const db = firebase.database();
         let rRef, teamMax, musicPlaying = false;
@@ -81,7 +80,6 @@
         function activateRoom() {
             const roomName = document.getElementById('r-name').value;
             teamMax = document.getElementById('t-count').value;
-            
             rRef = db.ref('rooms/' + roomName);
             
             // Clear buzzer and set status
@@ -165,10 +163,26 @@
             rRef.child('currentBuzz').on('value', s => {
                 const v = s.val();
                 const notif = document.getElementById('buzzer-notif');
-                if(v && v.user) {
+                
+                if (v && v.user) {
                     notif.style.display = 'block';
                     document.getElementById('th-user').innerText = v.user;
-                    document.getElementById('th-team').innerText = v.team ? "TEAM " + v.team : "TEAM ?";
+                    
+                    // IF TEAM IS MISSING, LOOK IT UP
+                    if(!v.team || v.team == "?") {
+                        rRef.child('players').once('value', pSnap => {
+                            let found = false;
+                            pSnap.forEach(p => {
+                                if(p.val().name === v.user) {
+                                    document.getElementById('th-team').innerText = "TEAM " + (p.val().team || "?");
+                                    found = true;
+                                }
+                            });
+                            if(!found) document.getElementById('th-team').innerText = "TEAM ?";
+                        });
+                    } else {
+                        document.getElementById('th-team').innerText = "TEAM " + v.team;
+                    }
                 } else {
                     notif.style.display = 'none';
                 }
