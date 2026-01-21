@@ -1,62 +1,164 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Fail-Safe Scoring</title>
+    <title>Trivia Master - Permanent Scoring</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; margin: 0; }
         .box { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; margin-bottom: 20px; }
+        
+        /* Scoreboard */
+        #score-area { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+        .score-card { background: #16213e; border: 1px solid #ffd700; padding: 10px; border-radius: 8px; min-width: 100px; }
+        .score-val { font-size: 2em; color: #ffd700; display: block; }
+
+        /* Grid */
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin: 20px 0; }
         .cat-h { color: #00d2ff; font-weight: bold; border-bottom: 2px solid #00d2ff; padding: 5px; text-transform: uppercase; }
         .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
         .cell.used { opacity: 0.15; }
+
+        /* Theater Overlay */
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:1000; flex-direction: column; justify-content: center; align-items: center; overflow-y: auto; }
         
-        /* Theater and Scoring Buttons */
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:500; flex-direction: column; justify-content: center; align-items: center; }
-        .score-row { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 20px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; }
-        .btn-score { padding: 15px 30px; font-size: 1.2em; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; min-width: 150px; }
-        .btn-yes { background: #28a745; color: white; }
-        .btn-no { background: #dc3545; color: white; }
-        
-        #buzzer-ui { background: #e94560; padding: 15px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 1000; border: 2px solid white; }
+        /* Permanent Scoring Panel */
+        .scoring-panel { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px; margin-top: 20px; width: 90%; max-width: 800px; }
+        .team-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #333; }
+        .btn-plus { background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        .btn-minus { background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+
         .editor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; text-align: left; }
+        input { background: #000; color: #fff; border: 1px solid #444; padding: 5px; }
+        #buzzer-ui { background: #e94560; padding: 15px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 2000; border: 2px solid white; }
     </style>
 </head>
 <body>
 
-    <div id="buzzer-ui">🔔 <span id="b-user">---</span> (Team <span id="b-team">?</span>) <button onclick="resetBuzzer()" style="margin-left:15px; padding:5px 10px;">RESET</button></div>
+    <div id="buzzer-ui">🔔 <span id="b-user">---</span> <button onclick="resetBuzzer()" style="margin-left:10px;">RESET</button></div>
 
     <div class="box">
-        Room: <input type="text" id="r-in" value="Class1" style="width:100px;">
-        Teams: <input type="number" id="t-in" value="3" style="width:40px;">
-        <button onclick="connect()" style="background:#00d2ff; color:black;">CONNECT</button>
+        Room: <input type="text" id="r-in" value="Class1">
+        Teams: <input type="number" id="t-in" value="3" style="width:50px;">
+        <button onclick="connect()" style="background:#00d2ff; padding: 5px 15px; border-radius: 5px;">CONNECT</button>
     </div>
 
-    <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom:20px;"></div>
+    <div id="score-area"></div>
     <div id="main-grid" class="grid"></div>
 
     <div id="theater">
-        <h2 id="theater-buzz-tag" style="color: #ffd700;">No one has buzzed yet</h2>
-        <div id="q-display" style="font-size:2.5em; padding:20px;"></div>
-        <button id="rev-btn" onclick="reveal()" style="padding:15px 30px; font-size:1.2em;">SHOW ANSWER</button>
+        <div id="q-box" style="font-size:2.5em; padding:20px;"></div>
+        <button id="rev-btn" onclick="reveal()" style="padding:15px 30px; font-size:1.2em; cursor:pointer;">SHOW ANSWER</button>
+        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
         
-        <div id="a-display" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
-        
-        <div id="score-controls" style="display:none;" class="score-row">
-            <div style="font-size:1.2em; margin-bottom:10px;">Award <span id="points-label"></span> points to:</div>
-            <div id="team-btn-container" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
-                </div>
-            <button onclick="closeTheater()" style="margin-top:20px; background:#444; color:white; padding:10px;">BACK TO BOARD</button>
+        <div id="score-ctrls" style="display:none;" class="scoring-panel">
+            <h3 style="margin-top:0;">Award/Deduct Points ($<span id="cur-val-display">0</span>)</h3>
+            <div id="team-scoring-list"></div>
+            <button onclick="closeTheater()" style="margin-top:20px; background:#444; color:white; padding:10px 20px; border:none; border-radius:5px; cursor:pointer;">BACK TO BOARD</button>
         </div>
     </div>
 
-    <div class="box" id="ed-sec">
-        <button onclick="loadSample()" style="background:#f39c12; color:white;">LOAD SAMPLES</button>
+    <div id="editor-sec" class="box">
+        <h3>EDITOR</h3>
         <div id="editor-container" class="editor-grid"></div>
-        <button onclick="build()" style="background:#28a745; color:white; width:100%; margin-top:15px; padding:15px;">BUILD BOARD</button>
+        <button onclick="build()" style="background:#28a745; color:white; width:100%; margin-top:15px; padding:15px; font-size:1.2em; border:none; border-radius:5px; cursor:pointer;">BUILD BOARD</button>
     </div>
 
     <script>
         const config = {
-            apiKey: "AIzaSyBYYe4
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
+            authDomain: "trivia-game-3fe59.firebaseapp.com",
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
+            projectId: "trivia-game-3fe59",
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
+        };
+        firebase.initializeApp(config);
+        const db = firebase.database();
+        let rRef, curVal = 0, teamCount = 3;
+
+        function connect() {
+            const name = document.getElementById('r-in').value;
+            teamCount = document.getElementById('t-in').value;
+            rRef = db.ref('rooms/' + name);
+            
+            // Build Scoreboard
+            const area = document.getElementById('score-area'); area.innerHTML = "";
+            for(let i=1; i<=teamCount; i++) {
+                let card = document.createElement('div'); card.className = "score-card";
+                card.innerHTML = `Team ${i}<br><span class="score-val" id="ts-${i}">0</span>`;
+                area.appendChild(card);
+                rRef.child('scores/team'+i).on('value', s => { document.getElementById('ts-'+i).innerText = s.val() || 0; });
+            }
+
+            rRef.child('currentBuzz').on('value', s => {
+                const v = s.val();
+                document.getElementById('buzzer-ui').style.display = v ? 'block' : 'none';
+                if(v) document.getElementById('b-user').innerText = v.user + " (Team " + v.team + ")";
+            });
+            alert("Connected to " + name);
+        }
+
+        function reveal() {
+            document.getElementById('a-box').style.display = 'block';
+            document.getElementById('rev-btn').style.display = 'none';
+            document.getElementById('cur-val-display').innerText = curVal;
+            
+            // Build the scoring list
+            const list = document.getElementById('team-scoring-list');
+            list.innerHTML = "";
+            for(let i=1; i<=teamCount; i++) {
+                list.innerHTML += `
+                    <div class="team-row">
+                        <span><strong>TEAM ${i}</strong></span>
+                        <div>
+                            <button class="btn-plus" onclick="modScore(${i}, ${curVal})">CORRECT (+$${curVal})</button>
+                            <button class="btn-minus" onclick="modScore(${i}, -${curVal})">WRONG (-$${curVal})</button>
+                        </div>
+                    </div>`;
+            }
+            document.getElementById('score-ctrls').style.display = 'block';
+        }
+
+        function modScore(tNum, amt) {
+            const el = document.getElementById('ts-'+tNum);
+            const next = parseInt(el.innerText) + amt;
+            rRef.child('scores/team'+tNum).set(next);
+        }
+
+        function closeTheater() {
+            document.getElementById('theater').style.display = 'none';
+            document.getElementById('score-ctrls').style.display = 'none';
+            document.getElementById('a-box').style.display = 'none';
+            resetBuzzer();
+        }
+
+        function resetBuzzer() { if(rRef) rRef.child('currentBuzz').set(null); }
+
+        function build() {
+            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
+            for(let c=1; c<=6; c++) {
+                let h = document.createElement('div'); h.className='cat-h';
+                h.innerText = document.getElementById('cn-'+c).value || "CAT "+c;
+                grid.appendChild(h);
+            }
+            [200,400,600,800,1000].forEach(val => {
+                for(let c=1; c<=6; c++) {
+                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${val}"]`).value;
+                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${val}"]`).value;
+                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+val;
+                    cell.onclick = () => { if(q) {
+                        curVal = val;
+                        document.getElementById('q-box').innerText = q;
+                        document.getElementById('a-box').innerText = a;
+                        document.getElementById('theater').style.display = 'flex';
+                        document.getElementById('rev-btn').style.display = 'block';
+                        cell.classList.add('used');
+                    }};
+                    grid.appendChild(cell);
+                }
+            });
+            document.getElementById('editor-sec').style.display = 'none';
+        }
+
+        // Build Editor
+        const ed
