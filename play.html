@@ -9,65 +9,110 @@
         body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
         .card { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; max-width: 350px; margin: 0 auto; }
         input, select, button { width: 90%; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 1.1em; }
-        #buzzer { background: radial-gradient(#ff0055, #80002b); color: white; height: 200px; width: 200px; border-radius: 50%; border: 5px solid white; display: none; margin: 20px auto; font-weight: bold; box-shadow: 0 0 20px rgba(255,0,85,0.5); }
+        
+        /* The Buzzer Button */
+        #buzzer { 
+            background: radial-gradient(#ff0055, #80002b); 
+            color: white; 
+            height: 250px; 
+            width: 250px; 
+            border-radius: 50%; 
+            border: 8px solid white; 
+            display: none; 
+            margin: 40px auto; 
+            font-weight: bold; 
+            font-size: 2em;
+            box-shadow: 0 0 30px rgba(255,0,85,0.5);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #buzzer:active { transform: scale(0.95); background: #80002b; }
+        #buzzer:disabled { opacity: 0.3; filter: grayscale(1); cursor: not-allowed; }
+        
+        #msg { margin-top: 20px; font-weight: bold; font-size: 1.2em; }
     </style>
 </head>
 <body>
+
     <div id="login-sec" class="card">
         <h2>STUDENT JOIN</h2>
-        <input type="text" id="p-name" placeholder="Your Name">
-        <select id="room-list"><option>Scanning for Teacher...</option></select>
+        <input type="text" id="p-name" placeholder="Enter Your Name">
+        <select id="room-list">
+            <option value="">Scanning for Teacher...</option>
+        </select>
         <button onclick="join()" style="background:#00d2ff; color:black; border:none; font-weight:bold;">JOIN GAME</button>
     </div>
 
     <div id="game-sec" style="display:none;">
-        <h3 id="team-notif">Waiting for Team Assignment...</h3>
+        <h3 id="team-notif" style="color:#00d2ff;">Waiting for Team Assignment...</h3>
         <button id="buzzer" onclick="buzz()">BUZZ!</button>
-        <div id="msg" style="margin-top:10px; color:#00ff00; font-weight:bold;">READY</div>
+        <div id="msg">READY</div>
     </div>
 
     <script>
-        const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
+        // --- FIREBASE CONFIG ---
+        const config = { 
+            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", 
+            authDomain: "trivia-game-3fe59.firebaseapp.com", 
+            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", 
+            projectId: "trivia-game-3fe59", 
+            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" 
+        };
         firebase.initializeApp(config);
         const db = firebase.database();
 
+        // --- 1. SCAN FOR ACTIVE ROOMS ---
         db.ref('rooms').on('value', s => {
             const drop = document.getElementById('room-list');
             drop.innerHTML = '<option value="">-- Select Room --</option>';
-            s.forEach(room => { if(room.val().metadata && room.val().metadata.status === 'active') { let o = document.createElement('option'); o.value = room.key; o.innerText = room.key; drop.appendChild(o); } });
+            s.forEach(room => { 
+                if(room.val().metadata && room.val().metadata.status === 'active') { 
+                    let o = document.createElement('option'); 
+                    o.value = room.key; 
+                    o.innerText = room.key; 
+                    drop.appendChild(o); 
+                } 
+            });
         });
 
+        // --- 2. JOIN THE ROOM ---
         function join() {
-            const name = document.getElementById('p-name').value;
+            const name = document.getElementById('p-name').value.trim();
             const room = document.getElementById('room-list').value;
-            if(!name || !room) return alert("Select your room!");
+            
+            if(!name || !room) return alert("Please enter your name and select a room!");
+
             document.getElementById('login-sec').style.display = 'none';
             document.getElementById('game-sec').style.display = 'block';
+            document.getElementById('buzzer').style.display = 'block';
+
             const rRef = db.ref('rooms/' + room);
-            const myId = name + "_" + Math.floor(Math.random()*1000);
+            const myId = name.replace(/\s+/g, '_') + "_" + Math.floor(Math.random()*1000);
+            
+            // Register player
             rRef.child('players/' + myId).set({ name: name, team: 0 });
             rRef.child('players/' + myId).onDisconnect().remove();
 
-            rRef.child('players/' + myId + '/team').on('value', s => { if(s.val() > 0) document.getElementById('team-notif').innerText = "TEAM " + s.val(); });
+            // Listen for Team Assignment from Teacher
+            rRef.child('players/' + myId + '/team').on('value', s => { 
+                const team = s.val();
+                if(team > 0) {
+                    document.getElementById('team-notif').innerText = "TEAM " + team;
+                    document.getElementById('team-notif').style.color = "#00ff00";
+                }
+            });
 
+            // Listen for Global Buzzer State
             rRef.child('currentBuzz').on('value', s => {
                 const b = document.getElementById('buzzer');
                 const msg = document.getElementById('msg');
                 const v = s.val();
+
                 if (v && v.user) {
-                    b.disabled = true; b.style.opacity = "0.3";
-                    msg.innerText = (v.user === window.myName) ? "YOU BUZZED!" : v.user + " buzzed!";
+                    b.disabled = true;
+                    msg.innerText = (v.user === name) ? "YOU BUZZED!" : v.user + " buzzed!";
                     msg.style.color = "#ff0055";
                 } else {
-                    b.disabled = false; b.style.opacity = "1";
-                    msg.innerText = "READY TO BUZZ!"; msg.style.color = "#00ff00";
-                }
-            });
-            window.myRRef = rRef; window.myName = name;
-            document.getElementById('buzzer').style.display = 'block';
-        }
-
-        function buzz() { window.myRRef.child('currentBuzz').transaction(c => { return c === null ? { user: window.myName } : undefined; }); }
-    </script>
-</body>
-</html>
+                    b.disabled = false;
+                    msg.innerText = "READY!";
+                    msg.
