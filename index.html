@@ -1,53 +1,90 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Auto-Load Edition</title>
+    <title>Trivia Master - Static Hub</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; margin: 0; }
-        .sidebar { width: 300px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; position: fixed; left: 0; top: 0; bottom: 0; text-align: left; overflow-y: auto; }
-        .main { margin-left: 340px; padding: 20px; }
-        .box { background: #222; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #444; }
-        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
-        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
-        .cell.used { opacity: 0.15; }
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar */
+        .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
+        
+        .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; text-align: left; }
+        .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
+        
+        input, select { width: 92%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; }
         button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
         .btn-blue { background: #00d2ff; color: black; }
-        #status-light { display: inline-block; width: 10px; height: 10px; background: red; border-radius: 50%; margin-right: 5px; }
+        .btn-green { background: #28a745; color: white; }
+        .btn-red { background: #e94560; color: white; } /* New Red Button Style */
+        
+        /* Grid & Theater */
+        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
+        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; display: flex; align-items: center; justify-content: center; }
+        .cell.used { opacity: 0.15; }
+        
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
+        #buzzer-ui { background: #e94560; padding: 10px; border-radius: 5px; display: none; text-align: center; font-weight: bold; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
+    <audio id="bg-music" loop><source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg"></audio>
+
     <div class="sidebar">
-        <h2>CONTROL</h2>
-        <div class="box">
-            <span id="status-light"></span> <span id="status-text">Disconnected</span>
-            <input type="text" id="r-name" value="Class1" style="width: 80%; padding: 5px; margin-top:10px;">
-            <button class="btn-blue" onclick="manualConnect()">FORCE CONNECT</button>
+        <div class="qr-box">
+            <img id="qr-img" style="width: 150px; height: 150px;" alt="QR Code Loading...">
+            <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN HUB</div>
+            <div style="font-size: 11px; color: #555;">Directs to play.html</div>
         </div>
-        <div class="box">
-            <strong>LIBRARY</strong>
-            <select id="library-dropdown" style="width:100%; margin-top:5px;"><option>Scanning...</option></select>
-            <button class="btn-blue" onclick="loadSampleBoard()">LOAD SAMPLE QUESTIONS</button>
+
+        <div id="buzzer-ui">
+            🔔 <span id="b-user">---</span><br>
+            <button onclick="resetBuzzer()" style="margin-top:5px; background:white; color:black;">RESET</button>
         </div>
-        <div id="qr-box" class="box" style="display:none; background: white; color: black; text-align: center;">
-            <img id="qr-img" style="width: 150px;">
-            <p>Scan to Join</p>
+
+        <div class="box">
+            <strong>1. CREATE ROOM</strong>
+            <input type="text" id="r-name" value="Class1">
+            <button class="btn-blue" onclick="connectRoom()">ACTIVATE ROOM</button>
+            <div id="status-msg" style="color: yellow; font-size: 12px; margin-top: 5px;">Status: Offline</div>
+        </div>
+
+        <div class="box">
+            <strong>2. LOAD LESSON</strong>
+            <select id="library-dropdown"><option>Scanning Library...</option></select>
+            <button class="btn-blue" onclick="loadLesson()">LOAD QUESTIONS</button>
+        </div>
+
+        <div class="box">
+            <strong>3. CONTROLS</strong>
+            <button class="btn-green" onclick="shuffleTeams()">SHUFFLE TEAMS</button>
+            <button class="btn-red" onclick="resetScores()">RESET SCORES</button>
+            <button onclick="toggleMusic()" id="music-btn" style="background:#444; color:white;">🎵 MUSIC: OFF</button>
         </div>
     </div>
 
     <div class="main">
-        <div id="score-area" style="display:flex; justify-content:center; gap:10px;"></div>
+        <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom: 20px;"></div>
         <div id="main-grid" class="grid"></div>
+        
+        <div id="welcome" style="margin-top:100px; color:#444;">
+            <h1>Trivia Master</h1>
+            <p>1. Activate Room &nbsp;|&nbsp; 2. Load Questions &nbsp;|&nbsp; 3. Play</p>
+        </div>
     </div>
 
     <div id="theater">
-        <div id="q-box" style="font-size:2.5em; padding:20px;"></div>
-        <button onclick="document.getElementById('a-box').style.display='block'" class="btn-blue" style="width:200px;">SHOW ANSWER</button>
-        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
-        <button onclick="document.getElementById('theater').style.display='none'" style="margin-top:20px; background:#444; color:white; width:200px;">CLOSE</button>
+        <div id="q-box" style="font-size:2.5em; padding:30px; text-align:center;"></div>
+        <button id="rev-btn" onclick="reveal()" class="btn-blue" style="width:200px;">SHOW ANSWER</button>
+        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px; text-align:center;"></div>
+        <div id="score-ctrls" style="display:none; margin-top:20px;">
+            <div id="team-btns" style="display:flex; gap:10px; justify-content:center;"></div>
+            <br>
+            <button onclick="closeTheater()" style="background:#444; color:white; width:200px;">BACK TO BOARD</button>
+        </div>
     </div>
 
     <script>
@@ -58,75 +95,30 @@
             projectId: "trivia-game-3fe59",
             appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
         };
+        firebase.initializeApp(config);
+        const db = firebase.database();
+        let rRef, teamMax = 3, gameData = null, musicPlaying = false;
 
-        // AUTO-INITIALIZE ON LOAD
-        try {
-            firebase.initializeApp(config);
-            var db = firebase.database();
-            console.log("Firebase Initialized");
-        } catch (e) {
-            console.error("Firebase failed:", e);
-        }
+        // --- 1. GENERATE STATIC QR ON LOAD ---
+        window.onload = function() {
+            const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + "/play.html";
+            const qrUrl = `https://chart.googleapis.com/chart?chs=150x150&cht=qr&chl=${encodeURIComponent(baseUrl)}`;
+            document.getElementById('qr-img').src = qrUrl;
+        };
 
-        function manualConnect() {
+        // --- 2. CORE FUNCTIONS ---
+        function connectRoom() {
             const room = document.getElementById('r-name').value;
-            const rRef = db.ref('rooms/' + room);
+            rRef = db.ref('rooms/' + room);
             
+            // Mark Active for Student Dropdown
             rRef.child('metadata').set({ status: 'active', lastActive: Date.now() });
+            rRef.child('metadata').onDisconnect().remove();
+
+            document.getElementById('status-msg').innerText = "✅ Active: " + room;
+            document.getElementById('status-msg').style.color = "#0f0";
             
-            document.getElementById('status-light').style.background = '#0f0';
-            document.getElementById('status-text').innerText = "Connected: " + room;
-            document.getElementById('qr-box').style.display = 'block';
-            
-            // Generate QR
-            const playLink = window.location.href.replace('index.html', 'play.html') + "?room=" + room;
-            document.getElementById('qr-img').src = `https://chart.googleapis.com/chart?chs=150x150&cht=qr&chl=${encodeURIComponent(playLink)}`;
-            
-            // Build Scoreboard
-            const sArea = document.getElementById('score-area'); sArea.innerHTML = "";
-            for(let i=1; i<=3; i++) {
-                sArea.innerHTML += `<div style="background:#222; padding:10px; border:1px solid #ffd700; border-radius:5px; min-width:80px;">Team ${i}<br><span id="ts-${i}">0</span></div>`;
-                rRef.child('scores/team'+i).on('value', s => { document.getElementById('ts-'+i).innerText = s.val() || 0; });
-            }
+            setupListeners();
         }
 
-        function loadSampleBoard() {
-            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
-            const sampleCats = ["Science", "History", "Pop Culture", "Math", "Geography", "Sports"];
-            
-            // Build Headers
-            sampleCats.forEach(cat => {
-                let h = document.createElement('div'); h.innerHTML = "<b>"+cat+"</b>"; 
-                h.style.color = "#00d2ff"; grid.appendChild(h);
-            });
-
-            // Build Cells
-            for(let r=1; r<=5; r++) {
-                for(let c=0; c<6; c++) {
-                    let cell = document.createElement('div');
-                    cell.className = 'cell';
-                    cell.innerText = "$" + (r * 200);
-                    cell.onclick = function() {
-                        document.getElementById('q-box').innerText = "Question for " + sampleCats[c] + " " + (r * 200);
-                        document.getElementById('a-box').innerText = "The Answer is HERE";
-                        document.getElementById('theater').style.display = 'flex';
-                        document.getElementById('a-box').style.display = 'none';
-                        this.style.opacity = "0.2";
-                    };
-                    grid.appendChild(cell);
-                }
-            }
-        }
-
-        // Run Scanner for Library
-        db.ref('library').on('value', s => {
-            const drop = document.getElementById('library-dropdown');
-            drop.innerHTML = '<option value="">-- Saved Lessons --</option>';
-            s.forEach(child => {
-                let opt = document.createElement('option'); opt.value = child.key; opt.innerText = child.key;
-                drop.appendChild(opt);
-            });
-        });
-    </script>
-</body>
-</html>
+        function loadLesson
