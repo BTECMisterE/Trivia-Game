@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Permanent Pro</title>
+    <title>Trivia Master - Ultimate Pro</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
@@ -9,195 +9,23 @@
         .box { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; margin-bottom: 20px; }
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin: 20px 0; }
         .cat-h { color: #00d2ff; font-weight: bold; border-bottom: 2px solid #00d2ff; padding: 5px; text-transform: uppercase; font-size: 0.9em; }
-        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
+        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; transition: 0.2s; }
         .cell.used { opacity: 0.15; }
         
-        /* Theater and Scoring */
+        /* Theater and Overlays */
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:1000; flex-direction: column; justify-content: center; align-items: center; }
-        .scoring-panel { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px; margin-top: 20px; width: 80%; }
-        .team-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #333; }
+        #daily-double-msg { display:none; color: #ffd700; font-size: 4em; font-weight: bold; animation: blink 0.6s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
 
-        /* Editor Styling */
-        .editor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; text-align: left; margin-top: 15px; }
+        .scoring-panel { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 15px; margin-top: 20px; width: 85%; max-width: 600px; }
+        .team-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #444; }
+        
+        .editor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; text-align: left; }
         .ed-col { background: #222; padding: 8px; border-radius: 5px; }
-        input { width: 92%; margin-bottom: 4px; background: #000; color: #fff; border: 1px solid #444; padding: 4px; font-size: 11px; }
-        .cat-input { border-bottom: 2px solid #00d2ff; font-weight: bold; margin-bottom: 10px; }
+        input, select { background: #000; color: #fff; border: 1px solid #444; padding: 4px; margin-bottom: 4px; width: 92%; font-size: 11px; }
         
         button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; }
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
         .btn-purple { background: #6f42c1; color: white; }
-        
-        #buzzer-ui { background: #e94560; padding: 15px; position: fixed; top: 10px; left: 25%; width: 50%; border-radius: 10px; display: none; z-index: 2000; border: 2px solid white; }
-    </style>
-</head>
-<body>
-
-    <div id="buzzer-ui">🔔 <span id="b-user">---</span> <button onclick="resetBuzzer()" style="margin-left:10px;">RESET</button></div>
-
-    <div class="box">
-        <strong>1. SESSION:</strong> 
-        Room: <input type="text" id="r-name" value="Class1" style="width:100px;">
-        Teams: <input type="number" id="t-count" value="3" style="width:45px;">
-        <button class="btn-blue" onclick="connectCloud()">CONNECT</button>
-        <button onclick="document.getElementById('ed-sec').style.display='block'" style="background:#444; color:white;">OPEN EDITOR</button>
-    </div>
-
-    <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom:20px;"></div>
-    <div id="main-grid" class="grid"></div>
-
-    <div id="theater">
-        <div id="q-box" style="font-size:2.5em; padding:20px;"></div>
-        <button id="rev-btn" onclick="revealAnswer()" class="btn-blue">SHOW ANSWER</button>
-        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
-        <div id="score-ctrls" style="display:none;" class="scoring-panel">
-            <div id="team-scoring-list"></div>
-            <button onclick="closeTheater()" style="margin-top:20px; background:#444; color:white;">BACK TO BOARD</button>
-        </div>
-    </div>
-
-    <div id="ed-sec" class="box">
-        <h3>2. BOARD EDITOR & LIBRARY</h3>
-        <div style="background:#222; padding:10px; margin-bottom:15px; border-radius:5px;">
-            <input type="text" id="lesson-name" placeholder="Save/Load Name (e.g. Science1)" style="width:200px;">
-            <button class="btn-purple" onclick="saveGame()">💾 SAVE TO CLOUD</button>
-            <button class="btn-blue" onclick="loadGame()">📂 LOAD FROM CLOUD</button>
-        </div>
-
-        <div class="editor-grid" id="editor-body">
-            </div>
-        <button class="btn-green" onclick="buildBoard()" style="width:100%; margin-top:15px; padding:15px; font-size:1.2em;">3. BUILD GAME BOARD</button>
-    </div>
-
-    <script>
-        const config = {
-            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-            authDomain: "trivia-game-3fe59.firebaseapp.com",
-            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-            projectId: "trivia-game-3fe59",
-            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
-        };
-
-        let rRef, curVal, teamMax;
-        const vals = [200, 400, 600, 800, 1000];
-
-        // Ensure the editor exists immediately
-        const eb = document.getElementById('editor-body');
-        for(let c=1; c<=6; c++) {
-            let col = document.createElement('div'); col.className = 'ed-col';
-            col.innerHTML = `<strong>CAT ${c}</strong><br><input type="text" id="cn-${c}" class="cat-input" placeholder="Category Name">`;
-            vals.forEach(v => {
-                col.innerHTML += `<input type="text" class="qi" data-c="${c}" data-v="${v}" placeholder="Q $${v}">`;
-                col.innerHTML += `<input type="text" class="ai" data-c="${c}" data-v="${v}" placeholder="A $${v}">`;
-            });
-            eb.appendChild(col);
-        }
-
-        function connectCloud() {
-            if (!firebase.apps.length) firebase.initializeApp(config);
-            const db = firebase.database();
-            const room = document.getElementById('r-name').value;
-            teamMax = document.getElementById('t-count').value;
-            rRef = db.ref('rooms/' + room);
-            
-            const sArea = document.getElementById('score-area'); sArea.innerHTML = "";
-            for(let i=1; i<=teamMax; i++) {
-                let d = document.createElement('div');
-                d.style = "background:#16213e; padding:10px; border:1px solid #ffd700; border-radius:8px; min-width:80px;";
-                d.innerHTML = `Team ${i}<br><span id="ts-${i}" style="font-size:1.5em;color:#ffd700;">0</span>`;
-                sArea.appendChild(d);
-                rRef.child('scores/team'+i).on('value', s => { document.getElementById('ts-'+i).innerText = s.val() || 0; });
-            }
-
-            rRef.child('currentBuzz').on('value', s => {
-                const v = s.val();
-                document.getElementById('buzzer-ui').style.display = v ? 'block' : 'none';
-                if(v) document.getElementById('b-user').innerText = v.user + " (Team " + v.team + ")";
-            });
-            alert("Connected to Room: " + room);
-        }
-
-        function saveGame() {
-            const name = document.getElementById('lesson-name').value.trim();
-            if(!name) return alert("Enter a name to save!");
-            let data = { categories: [] };
-            for(let c=1; c<=6; c++) {
-                let cat = { name: document.getElementById('cn-'+c).value, items: [] };
-                vals.forEach(v => {
-                    cat.items.push({ 
-                        q: document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value, 
-                        a: document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value 
-                    });
-                });
-                data.categories.push(cat);
-            }
-            firebase.database().ref('library/' + name).set(data).then(() => alert("Saved to Cloud Library!"));
-        }
-
-        function loadGame() {
-            const name = document.getElementById('lesson-name').value.trim();
-            firebase.database().ref('library/' + name).once('value', s => {
-                if(!s.exists()) return alert("Lesson not found!");
-                const data = s.val();
-                data.categories.forEach((cat, i) => {
-                    const cId = i + 1; document.getElementById(`cn-${cId}`).value = cat.name;
-                    cat.items.forEach((item, j) => {
-                        document.querySelector(`.qi[data-c="${cId}"][data-v="${vals[j]}"]`).value = item.q;
-                        document.querySelector(`.ai[data-c="${cId}"][data-v="${vals[j]}"]`).value = item.a;
-                    });
-                });
-                alert("Loaded into Editor!");
-            });
-        }
-
-        function buildBoard() {
-            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
-            for(let c=1; c<=6; c++) {
-                let h = document.createElement('div'); h.className='cat-h';
-                h.innerText = document.getElementById('cn-'+c).value || "CAT "+c;
-                grid.appendChild(h);
-            }
-            vals.forEach(v => {
-                for(let c=1; c<=6; c++) {
-                    const q = document.querySelector(`.qi[data-c="${c}"][data-v="${v}"]`).value;
-                    const a = document.querySelector(`.ai[data-c="${c}"][data-v="${v}"]`).value;
-                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+v;
-                    cell.onclick = () => { if(q) {
-                        curVal = v;
-                        document.getElementById('q-box').innerText = q;
-                        document.getElementById('a-box').innerText = a;
-                        document.getElementById('a-box').style.display = 'none';
-                        document.getElementById('rev-btn').style.display = 'block';
-                        document.getElementById('score-ctrls').style.display = 'none';
-                        document.getElementById('theater').style.display = 'flex';
-                        cell.classList.add('used');
-                    }};
-                    grid.appendChild(cell);
-                }
-            });
-            document.getElementById('ed-sec').style.display = 'none';
-        }
-
-        function revealAnswer() {
-            document.getElementById('a-box').style.display = 'block';
-            document.getElementById('rev-btn').style.display = 'none';
-            const list = document.getElementById('team-scoring-list'); list.innerHTML = "";
-            for(let i=1; i<=teamMax; i++) {
-                list.innerHTML += `<div class="team-row"><span>Team ${i}</span><div>
-                    <button onclick="modScore(${i}, ${curVal})" style="background:green; color:white;">+</button>
-                    <button onclick="modScore(${i}, -${curVal})" style="background:red; color:white;">-</button>
-                </div></div>`;
-            }
-            document.getElementById('score-ctrls').style.display = 'block';
-        }
-
-        function modScore(t, amt) {
-            const el = document.getElementById('ts-'+t);
-            rRef.child('scores/team'+t).set(parseInt(el.innerText) + amt);
-        }
-
-        function closeTheater() { document.getElementById('theater').style.display = 'none'; resetBuzzer(); }
-        function resetBuzzer() { if(rRef) rRef.child('currentBuzz').set(null); }
-    </script>
-</body>
-</html>
+        #buzzer-ui { background: #e94560; padding: 15px; position: fixed; top: 10px; left: 25
