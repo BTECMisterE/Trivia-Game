@@ -1,42 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Final Sidebar</title>
+    <title>Trivia Master - Teacher Board</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
-        
-        /* Sidebar Layout */
         .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
         .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
-        
         .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; }
         #debug-bar { background: #fff; color: #000; padding: 8px; font-weight: bold; font-size: 12px; border-radius: 4px; margin-bottom: 10px; }
-        
         input, select { width: 90%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; }
         button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
         .btn-red { background: #e94560; color: white; }
-        
-        /* Board Grid */
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
         .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
         .cell.used { opacity: 0.15; }
-        
-        /* Popups */
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
         #buzzer-notif { background: #e94560; padding: 20px; border-radius: 10px; display: none; font-size: 2em; border: 4px solid white; margin-bottom: 20px; }
     </style>
 </head>
 <body>
-
     <audio id="bg-music" loop><source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg"></audio>
 
     <div class="sidebar">
         <div id="debug-bar">LOG: Waiting for activation...</div>
-
         <div class="box">
             <strong>1. SETUP ROOM</strong>
             <input type="text" id="r-name" value="Class1">
@@ -47,13 +37,11 @@
             </select>
             <button class="btn-blue" onclick="forceConnect()">ACTIVATE ROOM</button>
         </div>
-
         <div id="step2-ui" class="box" style="display:none;">
             <strong>2. LESSON & START</strong>
             <select id="lib-drop"><option>Loading...</option></select>
             <button class="btn-blue" onclick="loadBoard()">START GAME</button>
         </div>
-
         <div id="step3-ui" class="box" style="display:none;">
             <strong>3. CONTROLS</strong>
             <button class="btn-green" onclick="shuffleTeams()">SHUFFLE TEAMS</button>
@@ -93,13 +81,13 @@
             teamMax = document.getElementById('t-count').value;
             rRef = db.ref('rooms/' + room);
             
+            rRef.child('currentBuzz').set(null); // FORCE RESET BUZZER ON START
             rRef.child('metadata').set({ status: 'active', time: Date.now() });
             rRef.child('metadata').onDisconnect().remove();
 
             log("Room '" + room + "' Active.");
             document.getElementById('step2-ui').style.display = 'block';
             
-            // Populate Library
             db.ref('library').on('value', s => {
                 const d = document.getElementById('lib-drop');
                 d.innerHTML = '<option value="">-- Select Lesson --</option>';
@@ -115,15 +103,11 @@
                 const data = s.val();
                 document.getElementById('welcome').style.display = 'none';
                 document.getElementById('step3-ui').style.display = 'block';
-                
-                // Build Scores
                 const sDiv = document.getElementById('score-display'); sDiv.innerHTML = "";
                 for(let i=1; i<=teamMax; i++) {
                     sDiv.innerHTML += `<div style="background:#222; padding:10px; border:1px solid #ffd700; border-radius:5px;">T${i}: <span id="score-${i}" style="color:#ffd700;">0</span></div>`;
-                    rRef.child('scores/team'+i).on('value', sv => { document.getElementById('score-'+i).innerText = sv.val() || 0; });
+                    rRef.child('scores/team'+i).on('value', sv => { if(document.getElementById('score-'+i)) document.getElementById('score-'+i).innerText = sv.val() || 0; });
                 }
-                
-                // Build Grid
                 const grid = document.getElementById('board-grid'); grid.innerHTML = "";
                 data.categories.forEach(cat => {
                     let h = document.createElement('div'); h.innerText = cat.name; h.style.color="#00d2ff"; h.style.fontWeight="bold"; grid.appendChild(h);
@@ -139,12 +123,12 @@
                             document.getElementById('a-box').style.display = 'none';
                             document.getElementById('rev-btn').style.display = 'block';
                             document.getElementById('score-ctrls').style.display = 'none';
+                            if(musicPlaying) audio.volume = 0.05;
                             c.classList.add('used');
                         };
                         grid.appendChild(c);
                     });
                 }
-                log("Game Board Ready.");
             });
         }
 
@@ -166,8 +150,8 @@
         function setupBuzzerListener() {
             rRef.child('currentBuzz').on('value', s => {
                 const v = s.val();
-                document.getElementById('buzzer-notif').style.display = v ? 'block' : 'none';
-                if(v) document.getElementById('th-user').innerText = v.user;
+                document.getElementById('buzzer-notif').style.display = (v && v.user) ? 'block' : 'none';
+                if(v && v.user) document.getElementById('th-user').innerText = v.user;
             });
         }
 
@@ -177,9 +161,17 @@
             musicPlaying = !musicPlaying;
         }
 
-        function closeTheater() { document.getElementById('theater').style.display = 'none'; rRef.child('currentBuzz').set(null); }
+        function closeTheater() { document.getElementById('theater').style.display = 'none'; rRef.child('currentBuzz').set(null); if(musicPlaying) audio.volume = 0.2; }
         function resetScores() { if(confirm("Reset?")) for(let i=1; i<=teamMax; i++) rRef.child('scores/team'+i).set(0); }
-        function shuffleTeams() { /* Same Fisher-Yates shuffle logic */ }
+        function shuffleTeams() { 
+            rRef.child('players').once('value', s => {
+                const players = s.val(); if(!players) return alert("No players!");
+                let pIds = Object.keys(players);
+                for (let i = pIds.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pIds[i], pIds[j]] = [pIds[j], pIds[i]]; }
+                pIds.forEach((id, index) => { rRef.child('players/' + id + '/team').set((index % teamMax) + 1); });
+                alert("Teams Shuffled!");
+            });
+        }
     </script>
 </body>
 </html>
