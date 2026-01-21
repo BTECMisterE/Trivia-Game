@@ -44,20 +44,14 @@
     </div>
 
     <div id="game-sec" style="display:none;">
-        <h3 id="team-notif" style="color:#00d2ff;">Waiting for Team Assignment...</h3>
+        <h3 id="team-notif" style="color:#aaa;">Waiting for Teacher to Shuffle...</h3>
         <button id="buzzer" onclick="buzz()">BUZZ!</button>
-        <div id="msg">READY</div>
+        <div id="msg"></div>
     </div>
 
     <script>
         // --- FIREBASE CONFIG ---
-        const config = { 
-            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", 
-            authDomain: "trivia-game-3fe59.firebaseapp.com", 
-            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", 
-            projectId: "trivia-game-3fe59", 
-            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" 
-        };
+        const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
         firebase.initializeApp(config);
         const db = firebase.database();
 
@@ -84,7 +78,6 @@
 
             document.getElementById('login-sec').style.display = 'none';
             document.getElementById('game-sec').style.display = 'block';
-            document.getElementById('buzzer').style.display = 'block';
 
             const rRef = db.ref('rooms/' + room);
             const myId = name.replace(/\s+/g, '_') + "_" + Math.floor(Math.random()*1000);
@@ -96,9 +89,17 @@
             // Listen for Team Assignment from Teacher
             rRef.child('players/' + myId + '/team').on('value', s => { 
                 const team = s.val();
+                const b = document.getElementById('buzzer');
+                
+                // --- CRITICAL FIX: Only show buzzer if team > 0 ---
                 if(team > 0) {
                     document.getElementById('team-notif').innerText = "TEAM " + team;
                     document.getElementById('team-notif').style.color = "#00ff00";
+                    b.style.display = 'block'; 
+                    window.myTeam = team;
+                } else {
+                    b.style.display = 'none';
+                    document.getElementById('team-notif').innerText = "Wait for Teacher to Shuffle...";
                 }
             });
 
@@ -115,4 +116,29 @@
                 } else {
                     b.disabled = false;
                     msg.innerText = "READY!";
-                    msg.
+                    msg.style.color = "#00ff00";
+                }
+            });
+
+            window.myRRef = rRef; 
+            window.myName = name;
+        }
+
+        // --- 3. THE BUZZ FUNCTION ---
+        function buzz() {
+            // DOUBLE CHECK: Only allow buzz if a team is assigned
+            if (!window.myTeam) return alert("No Team Assigned yet!");
+
+            window.myRRef.child('currentBuzz').transaction(currentData => {
+                if (currentData === null) {
+                    // Send both user name and team number
+                    return { user: window.myName, team: window.myTeam };
+                } else {
+                    return; 
+                }
+            });
+            if (navigator.vibrate) navigator.vibrate(100);
+        }
+    </script>
+</body>
+</html>
