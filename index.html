@@ -1,32 +1,105 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Force Run</title>
+    <title>Trivia Master - Safe Mode</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    
     <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
+        /* BASIC STYLES ONLY - NO FANCY FLEXBOX */
+        body { background: #1a1a2e; color: white; font-family: sans-serif; margin: 0; padding: 20px; text-align: center; }
         
-        /* Sidebar */
-        .sidebar { width: 340px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
-        .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
+        /* White Debug Bar */
+        #debug-bar { background: white; color: black; padding: 10px; font-weight: bold; border-radius: 5px; margin-bottom: 20px; text-align: left; }
         
-        .box { background: #222; padding: 10px; border-radius: 8px; border: 1px solid #444; text-align: left; }
-        .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; }
+        /* Containers */
+        .container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+        .sidebar { background: #111; padding: 20px; border: 2px solid #00d2ff; border-radius: 10px; text-align: left; }
+        .main-board { background: #222; padding: 20px; border-radius: 10px; min-height: 500px; }
         
-        /* Debug Log - High Visibility */
-        #sys-log { background: #000; color: #0f0; font-family: monospace; font-size: 11px; height: 100px; overflow-y: scroll; border: 1px solid #555; padding: 5px; margin-bottom: 10px; }
+        /* Elements */
+        .box { border-bottom: 1px solid #444; padding-bottom: 15px; margin-bottom: 15px; }
+        input, select { width: 95%; padding: 10px; margin: 5px 0; background: #000; color: white; border: 1px solid #444; }
+        select { background: white; color: black; border: 2px solid #00d2ff; font-weight: bold; }
         
-        input, select { width: 95%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; }
-        select { background: white; color: black; font-weight: bold; border: 2px solid #00d2ff; }
-        button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
+        button { width: 100%; padding: 12px; margin-top: 5px; cursor: pointer; border: none; font-weight: bold; border-radius: 5px; }
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
         .btn-red { background: #e94560; color: white; }
         
-        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
-        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; display: flex; align-items: center; justify-content: center; }
-        .cell.used { opacity: 0.15; }
+        /* Grid */
+        .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 10px; }
+        .cell { background: #16213e; border: 1px solid #555; padding: 20px 0; font-size: 1.5em; color: #ffd700; cursor: pointer; }
+        .cell:hover { background: #333; }
+        .cell.used { opacity: 0.2; }
+        .cat-header { color: #00d2ff; font-weight: bold; padding-bottom: 5px; border-bottom: 2px solid #00d2ff; }
+
+        /* Theater / Popups */
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(26, 26, 46, 0.98); z-index:9999; flex-direction:column; justify-content:center; align-items:center; }
+        #buzzer-notification { background: #e94560; color: white; padding: 20px; font-size: 2em; border-radius: 10px; display: none; margin-bottom: 20px; border: 4px solid white; animation: pop 0.3s ease; }
+        @keyframes pop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+    </style>
+</head>
+<body>
+
+    <div id="debug-bar">
+        SYSTEM STATUS: <span id="log-msg">Initializing...</span>
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="box">
+                <strong>QR CODE</strong>
+                <div style="background:white; padding:10px; text-align:center; margin-top:10px; border-radius:5px;">
+                    <img id="qr-img" src="" alt="QR Loading..." style="width:150px; height:150px; display:block; margin:0 auto;">
+                    <a id="qr-link" href="#" target="_blank" style="display:block; margin-top:5px; color:blue; font-size:12px;">Open Student Link</a>
+                </div>
+            </div>
+
+            <div class="box">
+                <strong>1. SETUP</strong><br>
+                <small>Room Name:</small>
+                <input type="text" id="r-name" value="Class1">
+                <small>Number of Teams:</small>
+                <select id="t-count">
+                    <option value="2">2 Teams</option>
+                    <option value="3" selected>3 Teams</option>
+                    <option value="4">4 Teams</option>
+                    <option value="5">5 Teams</option>
+                    <option value="6">6 Teams</option>
+                </select>
+                <button class="btn-blue" onclick="activateRoom()">ACTIVATE ROOM</button>
+            </div>
+
+            <div class="box">
+                <strong>2. LIBRARY</strong>
+                <select id="lib-drop"><option>Scanning...</option></select>
+                <button class="btn-blue" onclick="loadLesson()">LOAD BOARD</button>
+            </div>
+
+            <div class="box">
+                <strong>3. CONTROLS</strong>
+                <button class="btn-green" onclick="shuffleTeams()">SHUFFLE TEAMS</button>
+                <button class="btn-red" onclick="resetScores()">RESET SCORES</button>
+            </div>
+        </div>
+
+        <div class="main-board">
+            <div id="score-area" style="display:flex; justify-content:space-around; margin-bottom:20px; font-size:1.2em;">
+                Waiting for activation...
+            </div>
+            <div id="game-grid" class="grid"></div>
+            <div id="welcome-msg" style="margin-top:50px; color:#555;">
+                <h1>TRIVIA MASTER</h1>
+                <p>Use the sidebar to set up your game.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="theater">
+        <div id="buzzer-notification">🔔 SOMEONE BUZZED!</div>
         
-        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
-        #buzzer-ui { background: #e94560; padding: 10px; border-radius: 5px; display
+        <div id="q-box" style="font-size:3em; padding:40px; text-align:center;">Question</div>
+        
+        <button id="show-ans-btn" class="btn-blue" style="width:200px; font-size:1.2em;" onclick="reveal()">SHOW ANSWER</button
+                                                                                                                        
