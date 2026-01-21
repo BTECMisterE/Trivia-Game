@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trivia Master - Static Hub</title>
+    <title>Trivia Master Board</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
         
-        /* Sidebar */
+        /* Sidebar Styles */
         .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
         .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
         
@@ -18,13 +18,14 @@
         button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
-        .btn-red { background: #e94560; color: white; } /* New Red Button Style */
+        .btn-red { background: #e94560; color: white; }
         
-        /* Grid & Theater */
+        /* Game Grid */
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
         .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; display: flex; align-items: center; justify-content: center; }
         .cell.used { opacity: 0.15; }
         
+        /* Theater Overlay */
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
         #buzzer-ui { background: #e94560; padding: 10px; border-radius: 5px; display: none; text-align: center; font-weight: bold; margin-bottom: 10px; }
     </style>
@@ -35,25 +36,24 @@
 
     <div class="sidebar">
         <div class="qr-box">
-            <img id="qr-img" style="width: 150px; height: 150px;" alt="QR Code Loading...">
-            <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN HUB</div>
-            <div style="font-size: 11px; color: #555;">Directs to play.html</div>
+            <img id="qr-img" style="width: 150px; height: 150px;" alt="QR Code">
+            <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN</div>
         </div>
 
         <div id="buzzer-ui">
             🔔 <span id="b-user">---</span><br>
-            <button onclick="resetBuzzer()" style="margin-top:5px; background:white; color:black;">RESET</button>
+            <button onclick="resetBuzzer()" style="margin-top:5px; background:white; color:black;">RESET BUZZER</button>
         </div>
 
         <div class="box">
-            <strong>1. CREATE ROOM</strong>
+            <strong>1. SETUP ROOM</strong>
             <input type="text" id="r-name" value="Class1">
             <button class="btn-blue" onclick="connectRoom()">ACTIVATE ROOM</button>
             <div id="status-msg" style="color: yellow; font-size: 12px; margin-top: 5px;">Status: Offline</div>
         </div>
 
         <div class="box">
-            <strong>2. LOAD LESSON</strong>
+            <strong>2. LESSON</strong>
             <select id="library-dropdown"><option>Scanning Library...</option></select>
             <button class="btn-blue" onclick="loadLesson()">LOAD QUESTIONS</button>
         </div>
@@ -69,11 +69,7 @@
     <div class="main">
         <div id="score-area" style="display:flex; justify-content:center; gap:10px; margin-bottom: 20px;"></div>
         <div id="main-grid" class="grid"></div>
-        
-        <div id="welcome" style="margin-top:100px; color:#444;">
-            <h1>Trivia Master</h1>
-            <p>1. Activate Room &nbsp;|&nbsp; 2. Load Questions &nbsp;|&nbsp; 3. Play</p>
-        </div>
+        <div id="welcome" style="margin-top:100px; color:#444;"><h1>Trivia Master Board</h1></div>
     </div>
 
     <div id="theater">
@@ -82,43 +78,123 @@
         <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px; text-align:center;"></div>
         <div id="score-ctrls" style="display:none; margin-top:20px;">
             <div id="team-btns" style="display:flex; gap:10px; justify-content:center;"></div>
-            <br>
-            <button onclick="closeTheater()" style="background:#444; color:white; width:200px;">BACK TO BOARD</button>
+            <br><button onclick="closeTheater()" style="background:#444; color:white; width:200px;">BACK TO BOARD</button>
         </div>
     </div>
 
     <script>
-        const config = {
-            apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo",
-            authDomain: "trivia-game-3fe59.firebaseapp.com",
-            databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com",
-            projectId: "trivia-game-3fe59",
-            appId: "1:851139559118:web:df59f13dfd9234c1e89a9f"
-        };
+        const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
         firebase.initializeApp(config);
         const db = firebase.database();
         let rRef, teamMax = 3, gameData = null, musicPlaying = false;
 
-        // --- 1. GENERATE STATIC QR ON LOAD ---
         window.onload = function() {
+            // Point QR to play.html
             const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + "/play.html";
-            const qrUrl = `https://chart.googleapis.com/chart?chs=150x150&cht=qr&chl=${encodeURIComponent(baseUrl)}`;
-            document.getElementById('qr-img').src = qrUrl;
+            document.getElementById('qr-img').src = `https://chart.googleapis.com/chart?chs=150x150&cht=qr&chl=${encodeURIComponent(baseUrl)}`;
         };
 
-        // --- 2. CORE FUNCTIONS ---
         function connectRoom() {
             const room = document.getElementById('r-name').value;
             rRef = db.ref('rooms/' + room);
-            
-            // Mark Active for Student Dropdown
             rRef.child('metadata').set({ status: 'active', lastActive: Date.now() });
             rRef.child('metadata').onDisconnect().remove();
-
             document.getElementById('status-msg').innerText = "✅ Active: " + room;
             document.getElementById('status-msg').style.color = "#0f0";
-            
             setupListeners();
         }
 
-        function loadLesson
+        function loadLesson() {
+            const name = document.getElementById('library-dropdown').value;
+            if(!name || name.includes("Scanning")) return alert("Select a lesson.");
+            db.ref('library/' + name).once('value', s => {
+                gameData = s.val();
+                document.getElementById('welcome').style.display = 'none';
+                buildBoard();
+            });
+        }
+
+        function buildBoard() {
+            const grid = document.getElementById('main-grid'); grid.innerHTML = "";
+            gameData.categories.forEach(cat => {
+                let h = document.createElement('div'); h.style.color="#00d2ff"; h.style.fontWeight="bold"; h.innerText = cat.name; grid.appendChild(h);
+            });
+            for(let r=0; r<5; r++) {
+                gameData.categories.forEach(cat => {
+                    const item = cat.items[r];
+                    let cell = document.createElement('div'); cell.className='cell'; cell.innerText="$"+(200*(r+1));
+                    cell.onclick = () => {
+                        document.getElementById('q-box').innerText = item.q;
+                        document.getElementById('a-box').innerText = item.a;
+                        document.getElementById('theater').style.display = 'flex';
+                        document.getElementById('a-box').style.display = 'none';
+                        document.getElementById('rev-btn').style.display = 'block';
+                        document.getElementById('score-ctrls').style.display = 'none';
+                        if(musicPlaying) document.getElementById('bg-music').volume = 0.05;
+                        cell.classList.add('used');
+                    };
+                    grid.appendChild(cell);
+                });
+            }
+        }
+
+        function reveal() {
+            document.getElementById('a-box').style.display = 'block';
+            document.getElementById('rev-btn').style.display = 'none';
+            document.getElementById('score-ctrls').style.display = 'block';
+            const area = document.getElementById('team-btns'); area.innerHTML = "";
+            for(let i=1; i<=teamMax; i++) {
+                area.innerHTML += `<div style="background:#333; padding:5px; border-radius:5px;">Team ${i} <button onclick="addScore(${i}, 200)" style="background:green; color:white;">+</button></div>`;
+            }
+        }
+
+        function addScore(t, amt) {
+            const el = document.getElementById('ts-'+t);
+            rRef.child('scores/team'+t).set(parseInt(el.innerText) + amt);
+        }
+
+        function resetScores() {
+            if(confirm("Reset all scores to 0?")) {
+                for(let i=1; i<=teamMax; i++) rRef.child('scores/team'+i).set(0);
+            }
+        }
+
+        function setupListeners() {
+            const sArea = document.getElementById('score-area'); sArea.innerHTML = "";
+            for(let i=1; i<=teamMax; i++) {
+                sArea.innerHTML += `<div style="background:#222; padding:10px; border:1px solid #ffd700; border-radius:5px;">T${i}<br><span id="ts-${i}" style="color:#ffd700; font-size:1.5em;">0</span></div>`;
+                rRef.child('scores/team'+i).on('value', s => { document.getElementById('ts-'+i).innerText = s.val() || 0; });
+            }
+            db.ref('library').on('value', s => {
+                const d = document.getElementById('library-dropdown'); d.innerHTML = '<option value="">-- Select Lesson --</option>';
+                s.forEach(c => { let o = document.createElement('option'); o.value = c.key; o.innerText = c.key; d.appendChild(o); });
+            });
+            rRef.child('currentBuzz').on('value', s => {
+                const v = s.val(); 
+                document.getElementById('buzzer-ui').style.display = v ? 'block' : 'none';
+                if(v) document.getElementById('b-user').innerText = v.user;
+            });
+        }
+
+        function toggleMusic() {
+            const m = document.getElementById('bg-music');
+            if(musicPlaying) { m.pause(); document.getElementById('music-btn').innerText="🎵 MUSIC: OFF"; } 
+            else { m.volume=0.2; m.play(); document.getElementById('music-btn').innerText="🎶 MUSIC: ON"; }
+            musicPlaying = !musicPlaying;
+        }
+
+        function closeTheater() { document.getElementById('theater').style.display = 'none'; if(musicPlaying) document.getElementById('bg-music').volume = 0.2; resetBuzzer(); }
+        function resetBuzzer() { if(rRef) rRef.child('currentBuzz').set(null); }
+        function shuffleTeams() { 
+            rRef.child('players').once('value', s => {
+                const players = s.val();
+                if(!players) return alert("No players!");
+                let pIds = Object.keys(players);
+                for (let i = pIds.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pIds[i], pIds[j]] = [pIds[j], pIds[i]]; }
+                pIds.forEach((id, index) => { rRef.child('players/' + id + '/team').set((index % teamMax) + 1); });
+                alert("Teams Shuffled!");
+            });
+        }
+    </script>
+</body>
+</html>
