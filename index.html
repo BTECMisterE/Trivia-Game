@@ -72,4 +72,62 @@
     </div>
 
     <div class="main">
-        <div id="score-display" style="display:flex; justify-content:center; gap:15px; margin-bottom: 20
+        <div id="score-display" style="display:flex; justify-content:center; gap:15px; margin-bottom: 20px; font-size: 1.5em;"></div>
+        <div id="board-grid" class="grid"></div>
+        <div id="welcome" style="margin-top:100px; color:#444;"><h1>Trivia Master Board</h1><p>Enter a room name and click Activate.</p></div>
+    </div>
+
+    <div id="theater">
+        <div id="buzzer-notif">🔔 <span id="th-user">NAME</span> <br><small id="th-team" style="font-size:0.5em;">TEAM ?</small></div>
+        <div id="q-box" style="font-size:2.5em; padding:30px; text-align:center;"></div>
+        <button id="rev-btn" onclick="reveal()" class="btn-blue" style="width:200px;">SHOW ANSWER</button>
+        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
+        <div id="score-ctrls" style="display:none;">
+            <div id="team-btns" style="display:flex; gap:10px; justify-content:center;"></div>
+            <button onclick="closeTheater()" style="margin-top:20px; background:#444; color:white; width:200px;">BACK TO BOARD</button>
+        </div>
+    </div>
+
+    <script>
+        const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
+        firebase.initializeApp(config);
+        const db = firebase.database();
+        let rRef, teamMax = 3, musicPlaying = false;
+        const audio = document.getElementById('bg-music');
+
+        function log(m) { document.getElementById('debug-bar').innerText = "LOG: " + m; }
+
+        function activateRoom() {
+            try {
+                const roomName = document.getElementById('r-name').value;
+                teamMax = document.getElementById('t-count').value;
+                rRef = db.ref('rooms/' + roomName);
+                
+                // Initialize State
+                rRef.child('currentBuzz').set(null);
+                rRef.child('buzzerState').set('closed'); // Start Closed!
+                rRef.child('metadata').set({ status: 'active', time: Date.now() });
+                rRef.child('metadata').onDisconnect().remove();
+
+                log("Room Active: " + roomName);
+                document.getElementById('step2-ui').style.display = 'block';
+                
+                db.ref('library').on('value', s => {
+                    const d = document.getElementById('lib-drop');
+                    const oldVal = d.value;
+                    d.innerHTML = '<option value="">-- Select Lesson --</option>';
+                    d.innerHTML += '<option value="_CREATE_" style="color:#00d2ff; font-weight:bold;">➕ CREATE NEW BOARD</option>';
+                    if(s.exists()) {
+                        s.forEach(c => { let o = document.createElement('option'); o.value = c.key; o.innerText = c.key; d.appendChild(o); });
+                    }
+                    if(oldVal && oldVal !== "_CREATE_") d.value = oldVal;
+                });
+                setupBuzzerListener();
+            } catch (err) { alert("Error: " + err.message); }
+        }
+
+        // --- QR Logic ---
+        function generateQR(link) {
+            const url = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(link)}`;
+            document.getElementById('web-qr-img').src = url;
+            document.getElementById('
