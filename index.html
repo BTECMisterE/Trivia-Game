@@ -6,6 +6,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
+        
         .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
         .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
         .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; margin-bottom: 10px; }
@@ -96,13 +97,15 @@
 
         function log(m) { document.getElementById('debug-bar').innerText = "LOG: " + m; }
 
+        // --- 1. ACTIVATION LOGIC ---
         function activateRoom() {
             const roomName = document.getElementById('r-name').value;
             teamMax = document.getElementById('t-count').value;
             rRef = db.ref('rooms/' + roomName);
             
-            // GATEKEEPER: START CLOSED
-            rRef.child('buzzerState').set('closed'); 
+            // --- ISOLATED LOCK LOGIC START ---
+            rRef.child('buzzerState').set('closed'); // Start Closed
+            // --- ISOLATED LOCK LOGIC END ---
 
             rRef.child('currentBuzz').set(null);
             rRef.child('metadata').set({ status: 'active', time: Date.now() });
@@ -124,7 +127,7 @@
             setupBuzzerListener();
         }
 
-        // --- QR Logic ---
+        // --- 2. QR LOGIC ---
         function generateQR(link) {
             const url = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(link)}`;
             document.getElementById('web-qr-img').src = url;
@@ -140,7 +143,7 @@
             generateQR(path);
         });
 
-        // --- Game Logic ---
+        // --- 3. GAME LOGIC ---
         function checkBuilder(selectObj) { if(selectObj.value === "_CREATE_") { window.open('builder.html', '_blank'); selectObj.value = ""; } }
 
         function loadBoard() {
@@ -169,7 +172,7 @@
                             document.getElementById('rev-btn').style.display = 'block';
                             document.getElementById('score-ctrls').style.display = 'none';
                             
-                            // GATEKEEPER: OPEN
+                            // --- ISOLATED LOCK LOGIC: OPEN THE GATES ---
                             if(rRef) rRef.child('buzzerState').set('open');
                             
                             if(musicPlaying) audio.volume = 0.05;
@@ -186,7 +189,7 @@
             document.getElementById('rev-btn').style.display = 'none';
             document.getElementById('score-ctrls').style.display = 'block';
             
-            // GATEKEEPER: CLOSE
+            // --- ISOLATED LOCK LOGIC: CLOSE THE GATES (Prevent late buzzes) ---
             if(rRef) rRef.child('buzzerState').set('closed');
 
             const area = document.getElementById('team-btns'); area.innerHTML = "";
@@ -198,8 +201,10 @@
         function closeTheater() { 
             document.getElementById('theater').style.display = 'none'; 
             rRef.child('currentBuzz').set(null); 
-            // GATEKEEPER: RESET
+            
+            // --- ISOLATED LOCK LOGIC: RESET TO CLOSED ---
             if(rRef) rRef.child('buzzerState').set('closed');
+            
             if(musicPlaying) audio.volume = 0.2; 
         }
 
@@ -209,3 +214,22 @@
             rRef.child('currentBuzz').on('value', s => {
                 const v = s.val();
                 const notif = document.getElementById('buzzer-notif');
+                if (v && v.user) {
+                    notif.style.display = 'block';
+                    document.getElementById('th-user').innerText = v.user;
+                    if(!v.team || v.team == "?") {
+                        rRef.child('players').once('value', pSnap => {
+                            let found = false;
+                            pSnap.forEach(p => { if(p.val().name === v.user) { document.getElementById('th-team').innerText = "TEAM " + (p.val().team || "?"); found = true; } });
+                            if(!found) document.getElementById('th-team').innerText = "TEAM ?";
+                        });
+                    } else { document.getElementById('th-team').innerText = "TEAM " + v.team; }
+                } else { notif.style.display = 'none'; }
+            });
+        }
+        function toggleMusic() { if(musicPlaying) { audio.pause(); document.getElementById('music-btn').innerText="🎵 MUSIC: OFF"; } else { audio.volume=0.2; audio.play().catch(e=>alert("Music blocked. Click page first.")); document.getElementById('music-btn').innerText="🎶 MUSIC: ON"; } musicPlaying = !musicPlaying; }
+        function resetScores() { if(confirm("Reset?")) for(let i=1; i<=teamMax; i++) rRef.child('scores/team'+i).set(0); }
+        function shuffleTeams() { rRef.child('players').once('value', s => { const players = s.val(); if(!players) return alert("No players!"); let pIds = Object.keys(players); for (let i = pIds.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pIds[i], pIds[j]] = [pIds[j], pIds[i]]; } pIds.forEach((id, index) => { rRef.child('players/' + id + '/team').set((index % teamMax) + 1); }); alert("Teams Shuffled!"); }); }
+    </script>
+</body>
+</html>
