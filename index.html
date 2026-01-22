@@ -4,25 +4,25 @@
     <title>Trivia Master - Teacher Board</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    
     <style>
-        /* BASIC LAYOUT - Ensures visibility */
         body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
+        
+        /* SIDEBAR LAYOUT */
         .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
         .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
         
-        /* UI ELEMENTS */
-        .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; margin-bottom: 15px; }
+        /* UI BOXES */
+        .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; margin-bottom: 10px; }
+        
+        /* QR CODE (White background for scanning) */
+        .qr-area { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; }
+        
+        /* BUTTONS & INPUTS */
         input, select { width: 90%; padding: 10px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; border-radius: 4px; }
         button { cursor: pointer; padding: 12px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
-        
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
         .btn-red { background: #e94560; color: white; }
-        
-        /* QR CODE AREA */
-        .qr-area { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; min-height: 160px; }
-        .qr-area img { width: 150px; height: 150px; display: block; margin: 0 auto; }
         
         /* GAME GRID */
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
@@ -32,7 +32,7 @@
         /* POPUPS */
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
         #buzzer-notif { background: #e94560; padding: 20px; border-radius: 10px; display: none; font-size: 2em; border: 4px solid white; margin-bottom: 20px; }
-        #debug-bar { background: #fff; color: black; font-size: 10px; padding: 2px; }
+        #debug-bar { background: #fff; color: black; font-size: 10px; padding: 2px; border-radius: 2px; }
     </style>
 </head>
 <body>
@@ -40,9 +40,9 @@
 
     <div class="sidebar">
         <div class="qr-area">
-            <img id="qr-img" src="" alt="QR Code" onerror="this.style.display='none'">
+             <img style="width:150px; height:150px;" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAACWAQMAAAAGwe8OAAAABlBMVEUAAAD///+l2Z/dAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAi0lEQVRYhe3WMQ6AMAwDwBz5k5/xGT+CEFI60C6I7ZPYyY5St4lQ9+H+r8A+t9p7k/32Y1+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+1F/sA1tFjO5Q9vG4AAAAASUVORK5CYII=">
             <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN</div>
-            <a id="qr-link" href="#" target="_blank" style="font-size: 12px; color: blue;">Open Student Link</a>
+            <a id="qr-link" href="play.html" target="_blank" style="font-size: 12px; color: blue;">Open Student Link</a>
         </div>
 
         <div id="debug-bar">System Ready</div>
@@ -70,172 +70,4 @@
             <strong>3. CONTROLS</strong>
             <button class="btn-green" onclick="shuffleTeams()">SHUFFLE TEAMS</button>
             <button class="btn-red" onclick="resetScores()">RESET SCORES</button>
-            <button onclick="toggleMusic()" id="music-btn" style="background:#444; color:white;">🎵 MUSIC: OFF</button>
-        </div>
-    </div>
-
-    <div class="main">
-        <div id="score-display" style="display:flex; justify-content:center; gap:15px; margin-bottom: 20px; font-size: 1.5em;"></div>
-        <div id="board-grid" class="grid"></div>
-        <div id="welcome" style="margin-top:100px; color:#444;"><h1>Trivia Master Board</h1><p>Enter a room name and click Activate.</p></div>
-    </div>
-
-    <div id="theater">
-        <div id="buzzer-notif">🔔 <span id="th-user">NAME</span> <br><small id="th-team" style="font-size:0.5em;">TEAM ?</small></div>
-        <div id="q-box" style="font-size:2.5em; padding:30px; text-align:center;"></div>
-        <button id="rev-btn" onclick="reveal()" class="btn-blue" style="width:200px;">SHOW ANSWER</button>
-        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
-        <div id="score-ctrls" style="display:none;">
-            <div id="team-btns" style="display:flex; gap:10px; justify-content:center;"></div>
-            <button onclick="closeTheater()" style="margin-top:20px; background:#444; color:white; width:200px;">BACK TO BOARD</button>
-        </div>
-    </div>
-
-    <script>
-        // --- 1. GENERATE LINKS SAFELY ---
-        window.onload = function() {
-            let path = window.location.href;
-            if(path.endsWith("index.html")) path = path.replace("index.html", "play.html");
-            else if(path.endsWith("/")) path = path + "play.html";
-            else path = path.substring(0, path.lastIndexOf('/')) + "/play.html";
-
-            // Set Link Text
-            document.getElementById('qr-link').href = path;
-            
-            // Set Image Source
-            document.getElementById('qr-img').src = "https://quickchart.io/qr?text=" + encodeURIComponent(path) + "&size=150";
-        };
-
-        // --- 2. FIREBASE CONFIG ---
-        const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
-        firebase.initializeApp(config);
-        const db = firebase.database();
-        
-        let rRef, teamMax = 3, musicPlaying = false;
-        const audio = document.getElementById('bg-music');
-
-        function log(m) { document.getElementById('debug-bar').innerText = m; }
-
-        // --- 3. ACTIVATE ROOM ---
-        function activateRoom() {
-            const roomName = document.getElementById('r-name').value;
-            teamMax = document.getElementById('t-count').value;
-            rRef = db.ref('rooms/' + roomName);
-            
-            rRef.child('currentBuzz').set(null);
-            rRef.child('metadata').set({ status: 'active', time: Date.now() });
-            rRef.child('metadata').onDisconnect().remove();
-
-            log("Active: " + roomName);
-            document.getElementById('step2-ui').style.display = 'block';
-            
-            // Load Library + Builder Link
-            db.ref('library').on('value', s => {
-                const d = document.getElementById('lib-drop');
-                const oldVal = d.value;
-                d.innerHTML = '<option value="">-- Select Lesson --</option>';
-                d.innerHTML += '<option value="_CREATE_" style="color:#00d2ff; font-weight:bold;">➕ CREATE NEW BOARD</option>';
-                
-                if(s.exists()) {
-                    s.forEach(c => { 
-                        let o = document.createElement('option'); o.value = c.key; o.innerText = c.key; d.appendChild(o); 
-                    });
-                }
-                if(oldVal && oldVal !== "_CREATE_") d.value = oldVal;
-            });
-            setupBuzzerListener();
-        }
-
-        // --- 4. CHECK BUILDER SELECTION ---
-        function checkBuilder(selectObj) {
-            if(selectObj.value === "_CREATE_") {
-                window.open('builder.html', '_blank');
-                selectObj.value = "";
-            }
-        }
-
-        // --- 5. GAME FUNCTIONS ---
-        function loadBoard() {
-            const name = document.getElementById('lib-drop').value;
-            if(!name || name === "_CREATE_") return alert("Select a valid lesson!");
-            
-            db.ref('library/' + name).once('value', s => {
-                const data = s.val();
-                document.getElementById('welcome').style.display = 'none';
-                document.getElementById('step3-ui').style.display = 'block';
-                setupScoreboard();
-                
-                const grid = document.getElementById('board-grid'); grid.innerHTML = "";
-                data.categories.forEach(cat => {
-                    let h = document.createElement('div'); h.innerText = cat.name; h.style.color="#00d2ff"; h.style.fontWeight="bold"; grid.appendChild(h);
-                });
-                for(let r=0; r<5; r++) {
-                    data.categories.forEach(cat => {
-                        const item = cat.items[r];
-                        let c = document.createElement('div'); c.className="cell"; c.innerText = "$" + (200*(r+1));
-                        c.onclick = () => {
-                            document.getElementById('q-box').innerText = item.q;
-                            document.getElementById('a-box').innerText = item.a;
-                            document.getElementById('theater').style.display = 'flex';
-                            document.getElementById('a-box').style.display = 'none';
-                            document.getElementById('rev-btn').style.display = 'block';
-                            document.getElementById('score-ctrls').style.display = 'none';
-                            if(musicPlaying) audio.volume = 0.05;
-                            c.classList.add('used');
-                        };
-                        grid.appendChild(c);
-                    });
-                }
-            });
-        }
-
-        function reveal() {
-            document.getElementById('a-box').style.display = 'block';
-            document.getElementById('rev-btn').style.display = 'none';
-            document.getElementById('score-ctrls').style.display = 'block';
-            const area = document.getElementById('team-btns'); area.innerHTML = "";
-            for(let i=1; i<=teamMax; i++) {
-                area.innerHTML += `<div>T${i} <button onclick="addPoint(${i})" style="background:green; color:white; border-radius:4px; padding:5px;">+200</button></div>`;
-            }
-        }
-
-        function addPoint(t) {
-            const current = parseInt(document.getElementById('score-'+t).innerText);
-            rRef.child('scores/team'+t).set(current + 200);
-        }
-
-        function setupScoreboard() {
-            const sDiv = document.getElementById('score-display'); sDiv.innerHTML = "";
-            for(let i=1; i<=teamMax; i++) {
-                sDiv.innerHTML += `<div style="background:#222; padding:10px; border:1px solid #ffd700; border-radius:5px;">T${i}: <span id="score-${i}" style="color:#ffd700;">0</span></div>`;
-                rRef.child('scores/team'+i).on('value', sv => { 
-                    if(document.getElementById('score-'+i)) document.getElementById('score-'+i).innerText = sv.val() || 0; 
-                });
-            }
-        }
-
-        function setupBuzzerListener() {
-            rRef.child('currentBuzz').on('value', s => {
-                const v = s.val();
-                const notif = document.getElementById('buzzer-notif');
-                if (v && v.user) {
-                    notif.style.display = 'block';
-                    document.getElementById('th-user').innerText = v.user;
-                    if(!v.team || v.team == "?") {
-                        rRef.child('players').once('value', pSnap => {
-                            let found = false;
-                            pSnap.forEach(p => { if(p.val().name === v.user) { document.getElementById('th-team').innerText = "TEAM " + (p.val().team || "?"); found = true; } });
-                            if(!found) document.getElementById('th-team').innerText = "TEAM ?";
-                        });
-                    } else { document.getElementById('th-team').innerText = "TEAM " + v.team; }
-                } else { notif.style.display = 'none'; }
-            });
-        }
-
-        function toggleMusic() { if(musicPlaying) { audio.pause(); document.getElementById('music-btn').innerText="🎵 MUSIC: OFF"; } else { audio.volume=0.2; audio.play().catch(e=>alert("Music blocked. Click page first.")); document.getElementById('music-btn').innerText="🎶 MUSIC: ON"; } musicPlaying = !musicPlaying; }
-        function closeTheater() { document.getElementById('theater').style.display = 'none'; rRef.child('currentBuzz').set(null); if(musicPlaying) audio.volume = 0.2; }
-        function resetScores() { if(confirm("Reset?")) for(let i=1; i<=teamMax; i++) rRef.child('scores/team'+i).set(0); }
-        function shuffleTeams() { rRef.child('players').once('value', s => { const players = s.val(); if(!players) return alert("No players!"); let pIds = Object.keys(players); for (let i = pIds.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pIds[i], pIds[j]] = [pIds[j], pIds[i]]; } pIds.forEach((id, index) => { rRef.child('players/' + id + '/team').set((index % teamMax) + 1); }); alert("Teams Shuffled!"); }); }
-    </script>
-</body>
-</html>
+            <button onclick="toggleMusic()" id="
