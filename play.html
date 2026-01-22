@@ -8,7 +8,157 @@
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
         .card { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; max-width: 350px; margin: 0 auto; }
+        input, select, button { width: 90%; pa<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Buzzer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        .card { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; max-width: 350px; margin: 0 auto; }
         input, select, button { width: 90%; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 1.1em; }
+        
+        #buzzer { 
+            background: #444; /* Default: Gray/Disabled */
+            color: #aaa; 
+            height: 250px; 
+            width: 250px; 
+            border-radius: 50%; 
+            border: 8px solid #555; 
+            display: none; 
+            margin: 40px auto; 
+            font-weight: bold; 
+            font-size: 2em;
+            cursor: not-allowed;
+            transition: all 0.2s;
+        }
+        
+        /* Green: Ready to Buzz */
+        #buzzer.active {
+            background: radial-gradient(#00ff00, #006600);
+            color: black;
+            border-color: white;
+            cursor: pointer;
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.5);
+        }
+        
+        /* Red: Locked */
+        #buzzer.locked {
+            background: radial-gradient(#ff0055, #80002b);
+            color: white;
+            border-color: white;
+            cursor: not-allowed;
+        }
+        
+        #msg { margin-top: 20px; font-weight: bold; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+
+    <div id="login-sec" class="card">
+        <h2>STUDENT JOIN</h2>
+        <input type="text" id="p-name" placeholder="Enter Your Name">
+        <select id="room-list"><option value="">Scanning for Teacher...</option></select>
+        <button onclick="join()" style="background:#00d2ff; color:black; border:none; font-weight:bold;">JOIN GAME</button>
+    </div>
+
+    <div id="game-sec" style="display:none;">
+        <h3 id="team-notif" style="color:#aaa;">Waiting for Teacher to Shuffle...</h3>
+        <button id="buzzer" onclick="buzz()" disabled>WAIT...</button>
+        <div id="msg"></div>
+    </div>
+
+    <script>
+        const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
+        firebase.initializeApp(config);
+        const db = firebase.database();
+
+        db.ref('rooms').on('value', s => {
+            const drop = document.getElementById('room-list');
+            drop.innerHTML = '<option value="">-- Select Room --</option>';
+            s.forEach(room => { if(room.val().metadata && room.val().metadata.status === 'active') { let o = document.createElement('option'); o.value = room.key; o.innerText = room.key; drop.appendChild(o); } });
+        });
+
+        function join() {
+            const name = document.getElementById('p-name').value.trim();
+            const room = document.getElementById('room-list').value;
+            if(!name || !room) return alert("Select your room!");
+
+            document.getElementById('login-sec').style.display = 'none';
+            document.getElementById('game-sec').style.display = 'block';
+
+            const rRef = db.ref('rooms/' + room);
+            const myId = name.replace(/\s+/g, '_') + "_" + Math.floor(Math.random()*1000);
+            
+            rRef.child('players/' + myId).set({ name: name, team: 0 });
+            rRef.child('players/' + myId).onDisconnect().remove();
+
+            window.myRRef = rRef; 
+            window.myName = name;
+
+            // 1. Listen for Team
+            rRef.child('players/' + myId + '/team').on('value', s => { 
+                const team = s.val();
+                if(team > 0) {
+                    document.getElementById('team-notif').innerText = "TEAM " + team;
+                    document.getElementById('team-notif').style.color = "#00ff00";
+                    document.getElementById('buzzer').style.display = 'block'; 
+                    window.myTeam = team;
+                } else {
+                    document.getElementById('buzzer').style.display = 'none';
+                    document.getElementById('team-notif').innerText = "Wait for Teacher to Shuffle...";
+                }
+            });
+
+            // 2. LISTEN TO EVERYTHING (The Gatekeeper)
+            rRef.on('value', snap => {
+                const data = snap.val();
+                if(!data) return;
+
+                const buzzerState = data.buzzerState || 'closed';
+                const currentBuzz = data.currentBuzz || null;
+                const btn = document.getElementById('buzzer');
+                const msg = document.getElementById('msg');
+
+                // Priority 1: Did someone buzz?
+                if (currentBuzz && currentBuzz.user) {
+                    btn.disabled = true;
+                    btn.className = "locked";
+                    btn.innerText = "LOCKED";
+                    msg.innerText = (currentBuzz.user === name) ? "YOU BUZZED!" : currentBuzz.user + " buzzed!";
+                    msg.style.color = "#ff0055";
+                }
+                // Priority 2: Is the gate closed?
+                else if (buzzerState === 'closed') {
+                    btn.disabled = true;
+                    btn.className = ""; // Gray
+                    btn.innerText = "WAIT...";
+                    msg.innerText = "Wait for question...";
+                    msg.style.color = "#aaa";
+                }
+                // Priority 3: Gate is open!
+                else {
+                    btn.disabled = false;
+                    btn.className = "active"; // Green
+                    btn.innerText = "BUZZ!";
+                    msg.innerText = "GO!";
+                    msg.style.color = "#00ff00";
+                }
+            });
+        }
+
+        function buzz() {
+            if (!window.myTeam) return;
+            window.myRRef.child('currentBuzz').transaction(c => {
+                return c === null ? { user: window.myName, team: window.myTeam } : undefined;
+            });
+            if(navigator.vibrate) navigator.vibrate(100);
+        }
+    </script>
+</body>
+</html>dding: 15px; margin: 10px 0; border-radius: 8px; font-size: 1.1em; }
         
         #buzzer { 
             background: #444; /* Default Gray */
@@ -57,3 +207,4 @@
 
     <div id="game-sec" style="display:none;">
         <h3 id="team-not
+
