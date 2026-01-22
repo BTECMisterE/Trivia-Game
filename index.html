@@ -13,19 +13,14 @@
         .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; margin-bottom: 10px; }
         
         /* QR AREA */
-        .qr-area { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        #db-qr-img { width: 150px; height: 150px; display: none; object-fit: contain; border: 1px solid #ccc; }
-        #qr-placeholder { color: #888; font-size: 12px; margin-bottom: 10px; }
+        .qr-area { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; min-height: 180px; display: flex; flex-direction: column; align-items: center; }
+        #web-qr-img { width: 150px; height: 150px; display: block; margin: 0 auto; }
         
-        /* UPLOAD BUTTON (Small & Gray) */
-        .btn-upload { background: #444; color: white; font-size: 10px; padding: 5px; width: auto; margin-top: 5px; border-radius: 4px; border: none; cursor: pointer; }
-        .btn-upload:hover { background: #666; }
+        /* LINK INPUT (For Teachers) */
+        .link-input { width: 95%; padding: 5px; font-size: 10px; border: 1px solid #ccc; background: #eee; margin-top: 5px; color: #333; text-align: center; }
 
-        /* STANDARD INPUTS */
-        input[type="text"], select { width: 90%; padding: 10px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; border-radius: 4px; }
-        
-        /* MAIN BUTTONS */
-        button.main-btn { cursor: pointer; padding: 12px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
+        input, select { width: 90%; padding: 10px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; border-radius: 4px; }
+        button { cursor: pointer; padding: 12px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
         .btn-red { background: #e94560; color: white; }
@@ -44,17 +39,12 @@
 
     <div class="sidebar">
         <div class="qr-area">
-            <img id="db-qr-img" alt="QR Code">
+            <img id="web-qr-img" alt="Generating QR...">
+            <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN</div>
             
-            <div id="qr-placeholder">
-                No QR Saved yet.<br>Click below to upload.
-            </div>
-
-            <input type="file" id="qr-file-input" accept="image/*" style="display:none;" onchange="uploadQR()">
-            <button class="btn-upload" onclick="document.getElementById('qr-file-input').click()">☁️ UPLOAD / CHANGE QR</button>
+            <input type="text" id="student-link-box" class="link-input" oninput="updateQR()" placeholder="Paste Student Link Here">
             
-            <div style="font-weight: bold; margin-top: 10px; color:black;">SCAN TO JOIN</div>
-            <a id="qr-link" href="play.html" target="_blank" style="font-size: 11px; color: blue;">Open Student Link</a>
+            <a id="open-link-btn" href="#" target="_blank" style="font-size: 11px; color: blue; margin-top:5px; display:block;">Open Link in New Tab</a>
         </div>
 
         <div id="debug-bar">System Ready</div>
@@ -67,7 +57,7 @@
                 <option value="3" selected>3 Teams</option>
                 <option value="4">4 Teams</option>
             </select>
-            <button class="main-btn btn-blue" onclick="activateRoom()">ACTIVATE ROOM</button>
+            <button class="btn-blue" onclick="activateRoom()">ACTIVATE ROOM</button>
         </div>
 
         <div id="step2-ui" class="box" style="display:none;">
@@ -75,21 +65,16 @@
             <select id="lib-drop" onchange="checkBuilder(this)">
                 <option value="">Loading...</option>
             </select>
-            <button class="main-btn btn-blue" onclick="loadBoard()">START GAME</button>
+            <button class="btn-blue" onclick="loadBoard()">START GAME</button>
         </div>
 
         <div id="step3-ui" class="box" style="display:none;">
             <strong>3. CONTROLS</strong>
-            <button class="main-btn btn-green" onclick="shuffleTeams()">SHUFFLE TEAMS</button>
-            <button class="main-btn btn-red" onclick="resetScores()">RESET SCORES</button>
-            <button onclick="toggleMusic()" id="music-btn" class="main-btn" style="background:#444; color:white;">🎵 MUSIC: OFF</button>
+            <button class="btn-green" onclick="shuffleTeams()">SHUFFLE TEAMS</button>
+            <button class="btn-red" onclick="resetScores()">RESET SCORES</button>
+            <button onclick="toggleMusic()" id="music-btn" style="background:#444; color:white;">🎵 MUSIC: OFF</button>
         </div>
     </div>
 
     <div class="main">
         <div id="score-display" style="display:flex; justify-content:center; gap:15px; margin-bottom: 20px; font-size: 1.5em;"></div>
-        <div id="board-grid" class="grid"></div>
-        <div id="welcome" style="margin-top:100px; color:#444;"><h1>Trivia Master Board</h1><p>Enter a room name and click Activate.</p></div>
-    </div>
-
-    <div id="theater">
