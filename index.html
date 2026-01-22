@@ -1,121 +1,45 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Lesson Builder</title>
+    <title>Trivia Master - Teacher Board</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; padding: 20px; text-align: center; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        
-        .top-bar { background: #222; padding: 20px; border-radius: 10px; border: 1px solid #444; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        input[type="text"] { padding: 10px; border-radius: 5px; border: 1px solid #555; background: #000; color: white; width: 300px; }
-        button { padding: 10px 20px; font-weight: bold; border-radius: 5px; border: none; cursor: pointer; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
+        .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
+        .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; }
+        .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; min-height: 150px; }
+        #debug-bar { background: #fff; color: #000; padding: 8px; font-weight: bold; font-size: 12px; border-radius: 4px; margin-bottom: 10px; }
+        input, select { width: 90%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; border-radius: 4px; }
+        button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
+        .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
-        
-        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); }
-        .col-header input { width: 90%; background: #16213e; color: #00d2ff; font-weight: bold; text-align: center; border: 1px solid #00d2ff; padding: 10px; }
-        .cell { background: #111; border: 1px dashed #444; padding: 15px; border-radius: 5px; cursor: pointer; height: 60px; display: flex; align-items: center; justify-content: center; }
-        .cell:hover { border-color: #ffd700; background: #222; }
-        
-        #editor-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; justify-content: center; align-items: center; }
-        .editor-box { background: #222; padding: 30px; border: 2px solid #00d2ff; border-radius: 10px; width: 500px; text-align: left; }
-        textarea { width: 100%; height: 80px; background: #000; color: white; border: 1px solid #555; margin-bottom: 15px; padding: 10px; box-sizing: border-box; }
-        label { display: block; margin-bottom: 5px; color: #aaa; }
+        .btn-red { background: #e94560; color: white; }
+        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
+        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
+        .cell.used { opacity: 0.15; }
+        #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
+        #buzzer-notif { background: #e94560; padding: 20px; border-radius: 10px; display: none; font-size: 2em; border: 4px solid white; margin-bottom: 20px; text-align: center; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="top-bar">
-            <h2>🛠️ Lesson Builder</h2>
-            <input type="text" id="lesson-name" placeholder="Enter Lesson Name (e.g., Biology 101)">
-            <button class="btn-green" onclick="saveLesson()">💾 SAVE TO DATABASE</button>
-        </div>
-        <div id="grid-container" class="grid"></div>
-    </div>
+    <audio id="bg-music" loop><source src="https://actions.google.com/sounds/v1/alarms/mechanical_clock_ticking.ogg" type="audio/ogg"></audio>
 
-    <div id="editor-overlay">
-        <div class="editor-box">
-            <h3>Edit Tile</h3>
-            <label>Question:</label>
-            <textarea id="edit-q"></textarea>
-            <label>Answer:</label>
-            <textarea id="edit-a"></textarea>
-            <div style="text-align: right;">
-                <button onclick="closeEditor()" style="background: #e94560; color: white; margin-right: 10px;">Cancel</button>
-                <button onclick="saveTile()" style="background: #28a745; color: white;">Save Tile</button>
+    <div class="sidebar">
+        <div class="qr-box">
+            <img id="qr-img" style="width: 150px; height: 150px; display:block; margin:0 auto;" alt="QR Code" 
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAACWAQMAAAAGwe8OAAAABlBMVEUAAAD///+l2Z/dAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAi0lEQVRYhe3WMQ6AMAwDwBz5k5/xGT+CEFI60C6I7ZPYyY5St4lQ9+H+r8A+t9p7k/32Y1+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+1F/sA1tFjO5Q9vG4AAAAASUVORK5CYII=">
+            
+            <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN</div>
+            <div style="font-size: 11px; margin-top:5px;">
+                <a id="qr-link" href="play.html" target="_blank" style="color:blue;">Open Student Link</a>
             </div>
         </div>
-    </div>
 
-    <script>
-        const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
-        firebase.initializeApp(config);
-        const db = firebase.database();
+        <div id="debug-bar">LOG: Ready.</div>
 
-        let builderData = { categories: [] };
-        let activeCoords = null;
-
-        function init() {
-            for(let c=0; c<6; c++) {
-                let items = [];
-                for(let r=0; r<5; r++) items.push({ q: "Question", a: "Answer" });
-                builderData.categories.push({ name: "Category " + (c+1), items: items });
-            }
-            render();
-        }
-
-        function render() {
-            const grid = document.getElementById('grid-container');
-            grid.innerHTML = "";
-            builderData.categories.forEach((cat, cIdx) => {
-                let d = document.createElement('div');
-                d.className = "col-header";
-                let inp = document.createElement('input');
-                inp.value = cat.name;
-                inp.onchange = (e) => { builderData.categories[cIdx].name = e.target.value; };
-                d.appendChild(inp);
-                grid.appendChild(d);
-            });
-            for(let r=0; r<5; r++) {
-                builderData.categories.forEach((cat, cIdx) => {
-                    let c = document.createElement('div');
-                    c.className = "cell";
-                    c.innerText = "$" + (200*(r+1));
-                    c.onclick = () => openEditor(cIdx, r);
-                    grid.appendChild(c);
-                });
-            }
-        }
-
-        function openEditor(c, r) {
-            activeCoords = { c, r };
-            const item = builderData.categories[c].items[r];
-            document.getElementById('edit-q').value = item.q;
-            document.getElementById('edit-a').value = item.a;
-            document.getElementById('editor-overlay').style.display = 'flex';
-        }
-
-        function saveTile() {
-            const q = document.getElementById('edit-q').value;
-            const a = document.getElementById('edit-a').value;
-            builderData.categories[activeCoords.c].items[activeCoords.r] = { q, a };
-            closeEditor();
-        }
-
-        function closeEditor() {
-            document.getElementById('editor-overlay').style.display = 'none';
-        }
-
-        function saveLesson() {
-            const name = document.getElementById('lesson-name').value.trim();
-            if(!name) return alert("Please enter a lesson name first!");
-            db.ref('library/' + name).set(builderData, (error) => {
-                if(error) alert("Error saving: " + error.message);
-                else alert("SUCCESS! Lesson '" + name + "' saved. Go back to the Teacher Board and select it!");
-            });
-        }
-        init();
-    </script>
-</body>
-</html>
+        <div class="box">
+            <strong>1. SETUP ROOM</strong>
+            <input type="text" id="r-name" value="Class1">
+            <select id="t-count"><option value="2
