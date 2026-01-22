@@ -8,20 +8,10 @@
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
         .card { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; max-width: 350px; margin: 0 auto; }
-        input, select, button { width: 90%; pa<!DOCTYPE html>
-<html>
-<head>
-    <title>Student Buzzer</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
-        .card { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; max-width: 350px; margin: 0 auto; }
         input, select, button { width: 90%; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 1.1em; }
         
         #buzzer { 
-            background: #444; /* Default: Gray/Disabled */
+            background: #444; 
             color: #aaa; 
             height: 250px; 
             width: 250px; 
@@ -35,7 +25,7 @@
             transition: all 0.2s;
         }
         
-        /* Green: Ready to Buzz */
+        /* Green: Ready */
         #buzzer.active {
             background: radial-gradient(#00ff00, #006600);
             color: black;
@@ -75,10 +65,19 @@
         firebase.initializeApp(config);
         const db = firebase.database();
 
+        // FIXED SCANNER: Uses Safe Logic
         db.ref('rooms').on('value', s => {
             const drop = document.getElementById('room-list');
             drop.innerHTML = '<option value="">-- Select Room --</option>';
-            s.forEach(room => { if(room.val().metadata && room.val().metadata.status === 'active') { let o = document.createElement('option'); o.value = room.key; o.innerText = room.key; drop.appendChild(o); } });
+            s.forEach(room => { 
+                const val = room.val();
+                if(val && val.metadata && val.metadata.status === 'active') { 
+                    let o = document.createElement('option'); 
+                    o.value = room.key; 
+                    o.innerText = room.key; 
+                    drop.appendChild(o); 
+                } 
+            });
         });
 
         function join() {
@@ -158,53 +157,4 @@
         }
     </script>
 </body>
-</html>dding: 15px; margin: 10px 0; border-radius: 8px; font-size: 1.1em; }
-        
-        #buzzer { 
-            background: #444; /* Default Gray */
-            color: #aaa; 
-            height: 250px; 
-            width: 250px; 
-            border-radius: 50%; 
-            border: 8px solid #555; 
-            display: none; 
-            margin: 40px auto; 
-            font-weight: bold; 
-            font-size: 2em;
-            cursor: not-allowed;
-            transition: all 0.2s;
-        }
-        
-        /* When Active (Green) */
-        #buzzer.active {
-            background: radial-gradient(#00ff00, #006600);
-            color: black;
-            border-color: white;
-            cursor: pointer;
-            box-shadow: 0 0 30px rgba(0, 255, 0, 0.5);
-        }
-        
-        /* When Someone Buzzed (Red) */
-        #buzzer.locked {
-            background: radial-gradient(#ff0055, #80002b);
-            color: white;
-            border-color: white;
-            cursor: not-allowed;
-            opacity: 1;
-        }
-        
-        #msg { margin-top: 20px; font-weight: bold; font-size: 1.2em; }
-    </style>
-</head>
-<body>
-
-    <div id="login-sec" class="card">
-        <h2>STUDENT JOIN</h2>
-        <input type="text" id="p-name" placeholder="Enter Your Name">
-        <select id="room-list"><option value="">Scanning for Teacher...</option></select>
-        <button onclick="join()" style="background:#00d2ff; color:black; border:none; font-weight:bold;">JOIN GAME</button>
-    </div>
-
-    <div id="game-sec" style="display:none;">
-        <h3 id="team-not
-
+</html>
