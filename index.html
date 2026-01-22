@@ -6,40 +6,41 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
+        
+        /* Layout */
         .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
         .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
-        .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; }
-        .qr-box { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; min-height: 150px; }
-        #debug-bar { background: #fff; color: #000; padding: 8px; font-weight: bold; font-size: 12px; border-radius: 4px; margin-bottom: 10px; }
+        
+        /* Boxes */
+        .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; margin-bottom: 10px; }
+        
+        /* QR Code Styling */
+        .qr-container { background: white; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 160px; }
+        /* This SVG is the QR Code */
+        svg { width: 150px; height: 150px; }
+        
+        /* Inputs & Buttons */
         input, select { width: 90%; padding: 8px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; border-radius: 4px; }
         button { cursor: pointer; padding: 10px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
         .btn-red { background: #e94560; color: white; }
+        
+        /* Grid */
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
         .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; }
         .cell.used { opacity: 0.15; }
+        
+        /* Popups */
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
         #buzzer-notif { background: #e94560; padding: 20px; border-radius: 10px; display: none; font-size: 2em; border: 4px solid white; margin-bottom: 20px; text-align: center; }
+        #debug-bar { background: #fff; color: #000; padding: 5px; font-size: 10px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
     <audio id="bg-music" loop><source src="https://actions.google.com/sounds/v1/alarms/mechanical_clock_ticking.ogg" type="audio/ogg"></audio>
 
     <div class="sidebar">
-        <div class="qr-box">
-            <img id="qr-img" style="width: 150px; height: 150px; display:block; margin:0 auto;" alt="QR Code" 
-            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAACWAQMAAAAGwe8OAAAABlBMVEUAAAD///+l2Z/dAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAi0lEQVRYhe3WMQ6AMAwDwBz5k5/xGT+CEFI60C6I7ZPYyY5St4lQ9+H+r8A+t9p7k/32Y1+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+11x72XXvtYd+1F/sA1tFjO5Q9vG4AAAAASUVORK5CYII=">
-            
-            <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN</div>
-            <div style="font-size: 11px; margin-top:5px;">
-                <a id="qr-link" href="play.html" target="_blank" style="color:blue;">Open Student Link</a>
-            </div>
-        </div>
-
-        <div id="debug-bar">LOG: Ready.</div>
-
-        <div class="box">
-            <strong>1. SETUP ROOM</strong>
-            <input type="text" id="r-name" value="Class1">
-            <select id="t-count"><option value="2
+        <div class="box qr-container">
+            <svg viewBox="0 0 33 33" shape-rendering="crispEdges">
+                <path fill="#000000" d="M3 3h7v7h-7zM11 3h1v1h-1zM13 3h1v1h-1zM15 3h3v1h-3zM19 3h1v1h-1zM23 3h7v7h-7zM21 4h1v1h-1zM22 4h1v1h-1zM4 4h5v5h-5zM24 4h5v5h-5zM12 5h1v1h-1zM16 5h1v1h-1zM20 5h1v1h-1zM22 5h1v1h-1zM10 6h1v1h-1zM12 6h2v1h-2zM15 6h1v1h-1zM17 6h1v1h-1zM19 6h1v1h-1zM11 7h1v1h-1zM14 7h2v1h-2zM18 7h1v1h-1zM20 7h1v2h-1zM22 7h1v1h-1zM10 8h1v1h-1zM12 8h1v1h-1zM15 8h1v1h-1zM17 8h2v1h-2zM10 9h2v1h-2zM13 9h1v1h-1zM16 9h1v1h-1zM18 9h1v1h-1zM22 9h1v1h-1zM13 10h1v1h-1zM15 10h3v1h-3zM21 10h1v1h-1zM3 11h1v1h-1zM5 11h2v1h-2zM10 11h1v1h-1zM12 11h1v1h-1zM14 11h1v1h-1zM19 11h2v1h-2zM22 11h1v1h-1zM24 11h1v1h-1zM26 11h1v1h-1zM29 11h1v1h-1zM7 12h1v1h-1zM9 12h1v1h-1zM11 12h1v1h-1zM13 12h1v1h-1zM16 12h2v1h-2zM20 12h1v1h-1zM22 12h1v2h-1zM24 12h1v1h-1zM28 12h1v1h-1zM4 13h2v1h-2zM10 13h1v1h-1zM12 13h1v1h-1zM15 13h1v1h-1zM19 13h1v1h-1zM21 13h1v1h-1zM23 13h1v1h-1zM25 13h2v1h-2zM29 13h1v1h-1zM3 14h1v1h-1zM7 14h1v1h-1zM9 14h1v1h-1zM11 14h1v1h-1zM13 14h2v1h-2zM16 14h2v1h-2zM20 14h1v1h-1zM22 14h1v1h-1zM24 14h1v1h-1zM27 14h1v1h-1zM30 14h1v1h-1zM5 15h1v1h-1zM7 15h2v1h-2zM10 15h1v1h-1zM12 15h1v1h-1zM16 15h1v1h-1zM20 15h1v1h-1zM23 15h1v1h-1zM26 15h2v1h-2zM29 15h1v1h-1zM3 16h1v1h-1zM5 16h1v1h-1zM9 16h2v1h-2zM14 16h1v1h-1zM17 16h1v1h-1zM19 16h2v1h-2zM22 16h1v1h-1zM25 16h1v1h-1zM28 16h1v1h-1zM30 16h1v1h-1zM4 17h1v1h-1zM7 17h1v1h-1zM11 17h1v1h-1zM13 17h1v1h-1zM15 17h1v1h-1zM18 17h1v1h-1zM20 17h1v1h-1zM23 17h1v1h-1zM26 17h1v1h-1zM29 17h1v1h-1zM5 18h2v1h-2zM9 18h1v1h-1zM11 18h1v1h-1zM14 18h2v1h-2zM17 18h1v1h-1zM19 18h1v1h-1zM21 18h1v1h-1zM24 18h1v1h-1zM26 18h2v1h-2zM29 18h1v1h-1zM3 19h1v1h-1zM5 19h2v1h-2zM9 19h2v1h-2zM12 19h1v1h-1zM16 19h1v1h-1zM19 19h1v1h-1zM22 19h1v1h-1zM25 19h1v
