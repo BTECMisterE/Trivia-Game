@@ -11,7 +11,7 @@
         input, select, button { width: 90%; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 1.1em; }
         
         #buzzer { 
-            background: #444; 
+            background: #444; /* Default Gray */
             color: #aaa; 
             height: 250px; 
             width: 250px; 
@@ -43,6 +43,7 @@
         }
         
         #msg { margin-top: 20px; font-weight: bold; font-size: 1.2em; }
+        #recon-msg { color: #00d2ff; font-size: 0.9em; margin-bottom: 10px; display:none; }
     </style>
 </head>
 <body>
@@ -55,6 +56,7 @@
     </div>
 
     <div id="game-sec" style="display:none;">
+        <div id="recon-msg">⚡ RECONNECTED TO TEAM</div>
         <h3 id="team-notif" style="color:#aaa;">Waiting for Teacher to Shuffle...</h3>
         <button id="buzzer" onclick="buzz()" disabled>WAIT...</button>
         <div id="msg"></div>
@@ -65,7 +67,7 @@
         firebase.initializeApp(config);
         const db = firebase.database();
 
-        // FIXED SCANNER: Uses Safe Logic
+        // Populate Room List
         db.ref('rooms').on('value', s => {
             const drop = document.getElementById('room-list');
             drop.innerHTML = '<option value="">-- Select Room --</option>';
@@ -83,35 +85,66 @@
         function join() {
             const name = document.getElementById('p-name').value.trim();
             const room = document.getElementById('room-list').value;
-            if(!name || !room) return alert("Select your room!");
-
-            document.getElementById('login-sec').style.display = 'none';
-            document.getElementById('game-sec').style.display = 'block';
+            
+            if(!name || !room) return alert("Please enter your name and select a room!");
 
             const rRef = db.ref('rooms/' + room);
-            const myId = name.replace(/\s+/g, '_') + "_" + Math.floor(Math.random()*1000);
             
-            rRef.child('players/' + myId).set({ name: name, team: 0 });
-            rRef.child('players/' + myId).onDisconnect().remove();
+            // SMART RECONNECT LOGIC
+            // 1. Check if name exists in this room
+            rRef.child('players').once('value', snapshot => {
+                let existingId = null;
+                
+                if (snapshot.exists()) {
+                    snapshot.forEach(child => {
+                        // Compare names (case insensitive)
+                        if (child.val().name.toLowerCase() === name.toLowerCase()) {
+                            existingId = child.key;
+                        }
+                    });
+                }
+
+                // 2. Decide: Reconnect or Create New
+                if (existingId) {
+                    // FOUND! Reconnect to existing ID
+                    startGame(existingId, rRef, name, true);
+                } else {
+                    // NOT FOUND! Create new ID
+                    const newId = name.replace(/\s+/g, '_') + "_" + Math.floor(Math.random()*1000);
+                    rRef.child('players/' + newId).set({ name: name, team: 0 });
+                    rRef.child('players/' + newId).onDisconnect().remove();
+                    startGame(newId, rRef, name, false);
+                }
+            });
+        }
+
+        function startGame(id, rRef, name, isReconnected) {
+            document.getElementById('login-sec').style.display = 'none';
+            document.getElementById('game-sec').style.display = 'block';
+            
+            if(isReconnected) {
+                document.getElementById('recon-msg').style.display = 'block';
+            }
 
             window.myRRef = rRef; 
             window.myName = name;
 
-            // 1. Listen for Team
-            rRef.child('players/' + myId + '/team').on('value', s => { 
+            // 1. Listen for Team Assignment
+            rRef.child('players/' + id + '/team').on('value', s => { 
                 const team = s.val();
+                const b = document.getElementById('buzzer');
                 if(team > 0) {
                     document.getElementById('team-notif').innerText = "TEAM " + team;
                     document.getElementById('team-notif').style.color = "#00ff00";
-                    document.getElementById('buzzer').style.display = 'block'; 
+                    b.style.display = 'block'; 
                     window.myTeam = team;
                 } else {
-                    document.getElementById('buzzer').style.display = 'none';
+                    b.style.display = 'none';
                     document.getElementById('team-notif').innerText = "Wait for Teacher to Shuffle...";
                 }
             });
 
-            // 2. LISTEN TO EVERYTHING (The Gatekeeper)
+            // 2. Listen for Gatekeeper (Open/Closed) & Current Buzzer
             rRef.on('value', snap => {
                 const data = snap.val();
                 if(!data) return;
@@ -121,15 +154,13 @@
                 const btn = document.getElementById('buzzer');
                 const msg = document.getElementById('msg');
 
-                // Priority 1: Did someone buzz?
                 if (currentBuzz && currentBuzz.user) {
                     btn.disabled = true;
-                    btn.className = "locked";
+                    btn.className = "locked"; // Red
                     btn.innerText = "LOCKED";
                     msg.innerText = (currentBuzz.user === name) ? "YOU BUZZED!" : currentBuzz.user + " buzzed!";
                     msg.style.color = "#ff0055";
                 }
-                // Priority 2: Is the gate closed?
                 else if (buzzerState === 'closed') {
                     btn.disabled = true;
                     btn.className = ""; // Gray
@@ -137,7 +168,6 @@
                     msg.innerText = "Wait for question...";
                     msg.style.color = "#aaa";
                 }
-                // Priority 3: Gate is open!
                 else {
                     btn.disabled = false;
                     btn.className = "active"; // Green
@@ -150,11 +180,3 @@
 
         function buzz() {
             if (!window.myTeam) return;
-            window.myRRef.child('currentBuzz').transaction(c => {
-                return c === null ? { user: window.myName, team: window.myTeam } : undefined;
-            });
-            if(navigator.vibrate) navigator.vibrate(100);
-        }
-    </script>
-</body>
-</html>
