@@ -6,7 +6,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
-        
         .sidebar { width: 320px; background: #111; border-right: 2px solid #00d2ff; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
         .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
         .box { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; margin-bottom: 10px; }
@@ -21,6 +20,7 @@
         .btn-blue { background: #00d2ff; color: black; }
         .btn-green { background: #28a745; color: white; }
         .btn-red { background: #e94560; color: white; }
+        .btn-orange { background: #ff9900; color: black; }
         
         .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
         .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; min-height: 60px; display: flex; align-items: center; justify-content: center; }
@@ -66,7 +66,8 @@
         <div id="step3-ui" class="box" style="display:none;">
             <strong>3. CONTROLS</strong>
             <button class="btn-green" onclick="shuffleTeams()">SHUFFLE TEAMS</button>
-            <button class="btn-red" onclick="resetScores()">RESET SCORES</button>
+            <button class="btn-orange" onclick="resetScores()">RESET SCORES ONLY</button>
+            <button class="btn-red" onclick="newClass()">🗑️ NEW CLASS (Clear All)</button>
             <button onclick="toggleMusic()" id="music-btn" style="background:#444; color:white;">🎵 MUSIC: OFF</button>
         </div>
     </div>
@@ -97,15 +98,13 @@
 
         function log(m) { document.getElementById('debug-bar').innerText = "LOG: " + m; }
 
-        // --- 1. ACTIVATION LOGIC ---
         function activateRoom() {
             const roomName = document.getElementById('r-name').value;
             teamMax = document.getElementById('t-count').value;
             rRef = db.ref('rooms/' + roomName);
             
-            // --- ISOLATED LOCK LOGIC START ---
-            rRef.child('buzzerState').set('closed'); // Start Closed
-            // --- ISOLATED LOCK LOGIC END ---
+            // GATEKEEPER: START CLOSED
+            rRef.child('buzzerState').set('closed'); 
 
             rRef.child('currentBuzz').set(null);
             rRef.child('metadata').set({ status: 'active', time: Date.now() });
@@ -127,7 +126,25 @@
             setupBuzzerListener();
         }
 
-        // --- 2. QR LOGIC ---
+        // --- NEW: CLEAR FUNCTION ---
+        function newClass() {
+            if(confirm("⚠️ Start NEW CLASS?\n\nThis will KICK ALL PLAYERS and RESET SCORES.\n(Do not use this if you just refreshed your page!)")) {
+                if(rRef) {
+                    rRef.child('players').set(null);
+                    rRef.child('scores').set(null);
+                    rRef.child('currentBuzz').set(null);
+                    alert("Room Cleared! Ready for new students.");
+                }
+            }
+        }
+
+        function resetScores() { 
+            if(confirm("Reset SCORES only? (Players will stay connected)")) {
+                for(let i=1; i<=teamMax; i++) rRef.child('scores/team'+i).set(0); 
+            }
+        }
+
+        // --- QR Logic ---
         function generateQR(link) {
             const url = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(link)}`;
             document.getElementById('web-qr-img').src = url;
@@ -143,7 +160,7 @@
             generateQR(path);
         });
 
-        // --- 3. GAME LOGIC ---
+        // --- Game Logic ---
         function checkBuilder(selectObj) { if(selectObj.value === "_CREATE_") { window.open('builder.html', '_blank'); selectObj.value = ""; } }
 
         function loadBoard() {
@@ -172,7 +189,7 @@
                             document.getElementById('rev-btn').style.display = 'block';
                             document.getElementById('score-ctrls').style.display = 'none';
                             
-                            // --- ISOLATED LOCK LOGIC: OPEN THE GATES ---
+                            // GATEKEEPER: OPEN
                             if(rRef) rRef.child('buzzerState').set('open');
                             
                             if(musicPlaying) audio.volume = 0.05;
@@ -189,7 +206,7 @@
             document.getElementById('rev-btn').style.display = 'none';
             document.getElementById('score-ctrls').style.display = 'block';
             
-            // --- ISOLATED LOCK LOGIC: CLOSE THE GATES (Prevent late buzzes) ---
+            // GATEKEEPER: CLOSE
             if(rRef) rRef.child('buzzerState').set('closed');
 
             const area = document.getElementById('team-btns'); area.innerHTML = "";
@@ -201,10 +218,8 @@
         function closeTheater() { 
             document.getElementById('theater').style.display = 'none'; 
             rRef.child('currentBuzz').set(null); 
-            
-            // --- ISOLATED LOCK LOGIC: RESET TO CLOSED ---
+            // GATEKEEPER: RESET
             if(rRef) rRef.child('buzzerState').set('closed');
-            
             if(musicPlaying) audio.volume = 0.2; 
         }
 
@@ -228,7 +243,6 @@
             });
         }
         function toggleMusic() { if(musicPlaying) { audio.pause(); document.getElementById('music-btn').innerText="🎵 MUSIC: OFF"; } else { audio.volume=0.2; audio.play().catch(e=>alert("Music blocked. Click page first.")); document.getElementById('music-btn').innerText="🎶 MUSIC: ON"; } musicPlaying = !musicPlaying; }
-        function resetScores() { if(confirm("Reset?")) for(let i=1; i<=teamMax; i++) rRef.child('scores/team'+i).set(0); }
         function shuffleTeams() { rRef.child('players').once('value', s => { const players = s.val(); if(!players) return alert("No players!"); let pIds = Object.keys(players); for (let i = pIds.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pIds[i], pIds[j]] = [pIds[j], pIds[i]]; } pIds.forEach((id, index) => { rRef.child('players/' + id + '/team').set((index % teamMax) + 1); }); alert("Teams Shuffled!"); }); }
     </script>
 </body>
