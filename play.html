@@ -180,3 +180,11 @@
 
         function buzz() {
             if (!window.myTeam) return;
+            window.myRRef.child('currentBuzz').transaction(c => {
+                return c === null ? { user: window.myName, team: window.myTeam } : undefined;
+            });
+            if (navigator.vibrate) navigator.vibrate(100);
+        }
+    </script>
+</body>
+</html>
