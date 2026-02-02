@@ -11,7 +11,7 @@
         input, select, button { width: 90%; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 1.1em; }
         
         #buzzer { 
-            background: #444; /* Default Gray */
+            background: #444; 
             color: #aaa; 
             height: 250px; 
             width: 250px; 
@@ -25,7 +25,6 @@
             transition: all 0.2s;
         }
         
-        /* Green: Ready */
         #buzzer.active {
             background: radial-gradient(#00ff00, #006600);
             color: black;
@@ -34,7 +33,6 @@
             box-shadow: 0 0 30px rgba(0, 255, 0, 0.5);
         }
         
-        /* Red: Locked */
         #buzzer.locked {
             background: radial-gradient(#ff0055, #80002b);
             color: white;
@@ -44,6 +42,7 @@
         
         #msg { margin-top: 20px; font-weight: bold; font-size: 1.2em; }
         #recon-msg { color: #00d2ff; font-size: 0.9em; margin-bottom: 10px; display:none; }
+        #scan-status { font-size: 0.8em; color: #aaa; margin-top: -5px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -51,7 +50,12 @@
     <div id="login-sec" class="card">
         <h2>STUDENT JOIN</h2>
         <input type="text" id="p-name" placeholder="Enter Your Name">
-        <select id="room-list"><option value="">Scanning for Teacher...</option></select>
+        
+        <select id="room-list">
+            <option value="">Connecting...</option>
+        </select>
+        <div id="scan-status">Connecting to Database...</div>
+
         <button onclick="join()" style="background:#00d2ff; color:black; border:none; font-weight:bold;">JOIN GAME</button>
     </div>
 
@@ -67,21 +71,44 @@
         firebase.initializeApp(config);
         const db = firebase.database();
 
-        // Populate Room List
-        db.ref('rooms').on('value', s => {
-            const drop = document.getElementById('room-list');
+        // --- ROBUST ROOM SCANNER ---
+        const statusDiv = document.getElementById('scan-status');
+        const drop = document.getElementById('room-list');
+
+        db.ref('rooms').on('value', (snapshot) => {
             drop.innerHTML = '<option value="">-- Select Room --</option>';
-            s.forEach(room => { 
-                const val = room.val();
-                if(val && val.metadata && val.metadata.status === 'active') { 
-                    let o = document.createElement('option'); 
-                    o.value = room.key; 
-                    o.innerText = room.key; 
-                    drop.appendChild(o); 
-                } 
+            let count = 0;
+
+            if (!snapshot.exists()) {
+                statusDiv.innerText = "No rooms found in database.";
+                return;
+            }
+
+            snapshot.forEach((child) => {
+                const val = child.val();
+                // Check if room is valid AND active
+                if (val && val.metadata && val.metadata.status === 'active') {
+                    let o = document.createElement('option');
+                    o.value = child.key;
+                    o.innerText = child.key;
+                    drop.appendChild(o);
+                    count++;
+                }
             });
+
+            if (count === 0) {
+                statusDiv.innerText = "No ACTIVE rooms found. (Is Teacher Board open?)";
+                statusDiv.style.color = "orange";
+            } else {
+                statusDiv.innerText = "Found " + count + " active room(s).";
+                statusDiv.style.color = "#00ff00";
+            }
+        }, (error) => {
+            statusDiv.innerText = "Error: " + error.message;
+            statusDiv.style.color = "red";
         });
 
+        // --- JOIN / RECONNECT LOGIC ---
         function join() {
             const name = document.getElementById('p-name').value.trim();
             const room = document.getElementById('room-list').value;
@@ -90,26 +117,22 @@
 
             const rRef = db.ref('rooms/' + room);
             
-            // SMART RECONNECT LOGIC
-            // 1. Check if name exists in this room
+            // Check for existing player to reconnect
             rRef.child('players').once('value', snapshot => {
                 let existingId = null;
                 
                 if (snapshot.exists()) {
                     snapshot.forEach(child => {
-                        // Compare names (case insensitive)
-                        if (child.val().name.toLowerCase() === name.toLowerCase()) {
+                        const pData = child.val();
+                        if (pData && pData.name && pData.name.toLowerCase() === name.toLowerCase()) {
                             existingId = child.key;
                         }
                     });
                 }
 
-                // 2. Decide: Reconnect or Create New
                 if (existingId) {
-                    // FOUND! Reconnect to existing ID
                     startGame(existingId, rRef, name, true);
                 } else {
-                    // NOT FOUND! Create new ID
                     const newId = name.replace(/\s+/g, '_') + "_" + Math.floor(Math.random()*1000);
                     rRef.child('players/' + newId).set({ name: name, team: 0 });
                     rRef.child('players/' + newId).onDisconnect().remove();
@@ -129,7 +152,7 @@
             window.myRRef = rRef; 
             window.myName = name;
 
-            // 1. Listen for Team Assignment
+            // 1. Team Listener
             rRef.child('players/' + id + '/team').on('value', s => { 
                 const team = s.val();
                 const b = document.getElementById('buzzer');
@@ -144,7 +167,7 @@
                 }
             });
 
-            // 2. Listen for Gatekeeper (Open/Closed) & Current Buzzer
+            // 2. Game State Listener (Traffic Light)
             rRef.on('value', snap => {
                 const data = snap.val();
                 if(!data) return;
@@ -156,21 +179,21 @@
 
                 if (currentBuzz && currentBuzz.user) {
                     btn.disabled = true;
-                    btn.className = "locked"; // Red
+                    btn.className = "locked";
                     btn.innerText = "LOCKED";
                     msg.innerText = (currentBuzz.user === name) ? "YOU BUZZED!" : currentBuzz.user + " buzzed!";
                     msg.style.color = "#ff0055";
                 }
                 else if (buzzerState === 'closed') {
                     btn.disabled = true;
-                    btn.className = ""; // Gray
+                    btn.className = "";
                     btn.innerText = "WAIT...";
                     msg.innerText = "Wait for question...";
                     msg.style.color = "#aaa";
                 }
                 else {
                     btn.disabled = false;
-                    btn.className = "active"; // Green
+                    btn.className = "active";
                     btn.innerText = "BUZZ!";
                     msg.innerText = "GO!";
                     msg.style.color = "#00ff00";
