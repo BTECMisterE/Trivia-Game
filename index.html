@@ -29,6 +29,11 @@
         #theater { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #1a1a2e; z-index:2000; flex-direction: column; justify-content: center; align-items: center; }
         #buzzer-notif { background: #e94560; padding: 20px; border-radius: 10px; display: none; font-size: 2em; border: 4px solid white; margin-bottom: 20px; }
         #debug-bar { background: #fff; color: black; font-size: 10px; padding: 2px; }
+
+        /* Score Buttons in Theater */
+        .score-btn { padding: 10px; width: 60px; font-size: 1.2em; border-radius: 5px; cursor: pointer; border: none; margin: 0 5px; }
+        .s-plus { background: #28a745; color: white; }
+        .s-minus { background: #e94560; color: white; }
     </style>
 </head>
 <body>
@@ -84,7 +89,7 @@
         <button id="rev-btn" onclick="reveal()" class="btn-blue" style="width:200px;">SHOW ANSWER</button>
         <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:20px;"></div>
         <div id="score-ctrls" style="display:none;">
-            <div id="team-btns" style="display:flex; gap:10px; justify-content:center;"></div>
+            <div id="team-btns" style="display:flex; gap:20px; justify-content:center;"></div>
             <button onclick="closeTheater()" style="margin-top:20px; background:#444; color:white; width:200px;">BACK TO BOARD</button>
         </div>
     </div>
@@ -126,7 +131,7 @@
             setupBuzzerListener();
         }
 
-        // --- NEW: CLEAR FUNCTION ---
+        // --- NEW CLASS ---
         function newClass() {
             if(confirm("⚠️ Start NEW CLASS?\n\nThis will KICK ALL PLAYERS and RESET SCORES.\n(Do not use this if you just refreshed your page!)")) {
                 if(rRef) {
@@ -201,6 +206,7 @@
             });
         }
 
+        // --- MODIFIED REVEAL FUNCTION FOR ADD/SUBTRACT ---
         function reveal() {
             document.getElementById('a-box').style.display = 'block';
             document.getElementById('rev-btn').style.display = 'none';
@@ -209,9 +215,15 @@
             // GATEKEEPER: CLOSE
             if(rRef) rRef.child('buzzerState').set('closed');
 
-            const area = document.getElementById('team-btns'); area.innerHTML = "";
+            const area = document.getElementById('team-btns'); 
+            area.innerHTML = "";
             for(let i=1; i<=teamMax; i++) {
-                area.innerHTML += `<div>T${i} <button onclick="addPoint(${i})" style="background:green; color:white; border-radius:4px; padding:5px;">+200</button></div>`;
+                area.innerHTML += `
+                <div style="text-align:center;">
+                    <div style="font-weight:bold; color:#aaa; margin-bottom:5px;">TEAM ${i}</div>
+                    <button onclick="adjustScore(${i}, 200)" class="score-btn s-plus">+</button>
+                    <button onclick="adjustScore(${i}, -200)" class="score-btn s-minus">-</button>
+                </div>`;
             }
         }
 
@@ -223,8 +235,14 @@
             if(musicPlaying) audio.volume = 0.2; 
         }
 
-        function addPoint(t) { const current = parseInt(document.getElementById('score-'+t).innerText); rRef.child('scores/team'+t).set(current + 200); }
+        // --- NEW: GENERIC SCORE ADJUSTER ---
+        function adjustScore(t, amount) { 
+            const current = parseInt(document.getElementById('score-'+t).innerText); 
+            rRef.child('scores/team'+t).set(current + amount); 
+        }
+
         function setupScoreboard() { const sDiv = document.getElementById('score-display'); sDiv.innerHTML = ""; for(let i=1; i<=teamMax; i++) { sDiv.innerHTML += `<div style="background:#222; padding:10px; border:1px solid #ffd700; border-radius:5px;">T${i}: <span id="score-${i}" style="color:#ffd700;">0</span></div>`; rRef.child('scores/team'+i).on('value', sv => { if(document.getElementById('score-'+i)) document.getElementById('score-'+i).innerText = sv.val() || 0; }); } }
+        
         function setupBuzzerListener() {
             rRef.child('currentBuzz').on('value', s => {
                 const v = s.val();
