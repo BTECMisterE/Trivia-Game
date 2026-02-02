@@ -30,8 +30,8 @@
         #buzzer-notif { background: #e94560; padding: 20px; border-radius: 10px; display: none; font-size: 2em; border: 4px solid white; margin-bottom: 20px; }
         #debug-bar { background: #fff; color: black; font-size: 10px; padding: 2px; }
 
-        /* Score Buttons in Theater */
-        .score-btn { padding: 10px; width: 60px; font-size: 1.2em; border-radius: 5px; cursor: pointer; border: none; margin: 0 5px; }
+        /* DYNAMIC SCORE BUTTONS */
+        .score-btn { padding: 10px; width: 80px; font-size: 1em; border-radius: 5px; cursor: pointer; border: none; margin: 0 5px; font-weight: bold; }
         .s-plus { background: #28a745; color: white; }
         .s-minus { background: #e94560; color: white; }
     </style>
@@ -99,6 +99,10 @@
         firebase.initializeApp(config);
         const db = firebase.database();
         let rRef, teamMax = 3, musicPlaying = false;
+        
+        // NEW: Variable to hold the current question's value
+        let currentQValue = 200; 
+        
         const audio = document.getElementById('bg-music');
 
         function log(m) { document.getElementById('debug-bar').innerText = "LOG: " + m; }
@@ -108,9 +112,7 @@
             teamMax = document.getElementById('t-count').value;
             rRef = db.ref('rooms/' + roomName);
             
-            // GATEKEEPER: START CLOSED
             rRef.child('buzzerState').set('closed'); 
-
             rRef.child('currentBuzz').set(null);
             rRef.child('metadata').set({ status: 'active', time: Date.now() });
             rRef.child('metadata').onDisconnect().remove();
@@ -131,25 +133,23 @@
             setupBuzzerListener();
         }
 
-        // --- NEW CLASS ---
         function newClass() {
-            if(confirm("⚠️ Start NEW CLASS?\n\nThis will KICK ALL PLAYERS and RESET SCORES.\n(Do not use this if you just refreshed your page!)")) {
+            if(confirm("⚠️ Start NEW CLASS?\n\nThis will KICK ALL PLAYERS and RESET SCORES.")) {
                 if(rRef) {
                     rRef.child('players').set(null);
                     rRef.child('scores').set(null);
                     rRef.child('currentBuzz').set(null);
-                    alert("Room Cleared! Ready for new students.");
+                    alert("Room Cleared!");
                 }
             }
         }
 
         function resetScores() { 
-            if(confirm("Reset SCORES only? (Players will stay connected)")) {
+            if(confirm("Reset SCORES only?")) {
                 for(let i=1; i<=teamMax; i++) rRef.child('scores/team'+i).set(0); 
             }
         }
 
-        // --- QR Logic ---
         function generateQR(link) {
             const url = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(link)}`;
             document.getElementById('web-qr-img').src = url;
@@ -165,7 +165,6 @@
             generateQR(path);
         });
 
-        // --- Game Logic ---
         function checkBuilder(selectObj) { if(selectObj.value === "_CREATE_") { window.open('builder.html', '_blank'); selectObj.value = ""; } }
 
         function loadBoard() {
@@ -185,8 +184,15 @@
                 for(let r=0; r<5; r++) {
                     data.categories.forEach(cat => {
                         const item = cat.items[r];
-                        let c = document.createElement('div'); c.className="cell"; c.innerText = "$" + (200*(r+1));
+                        
+                        // CALCULATE VALUE
+                        const points = 200 * (r + 1);
+                        
+                        let c = document.createElement('div'); c.className="cell"; c.innerText = "$" + points;
                         c.onclick = () => {
+                            // STORE VALUE
+                            currentQValue = points;
+                            
                             document.getElementById('q-box').innerText = item.q;
                             document.getElementById('a-box').innerText = item.a;
                             document.getElementById('theater').style.display = 'flex';
@@ -194,7 +200,6 @@
                             document.getElementById('rev-btn').style.display = 'block';
                             document.getElementById('score-ctrls').style.display = 'none';
                             
-                            // GATEKEEPER: OPEN
                             if(rRef) rRef.child('buzzerState').set('open');
                             
                             if(musicPlaying) audio.volume = 0.05;
@@ -206,23 +211,23 @@
             });
         }
 
-        // --- MODIFIED REVEAL FUNCTION FOR ADD/SUBTRACT ---
+        // --- DYNAMIC SCORING REVEAL ---
         function reveal() {
             document.getElementById('a-box').style.display = 'block';
             document.getElementById('rev-btn').style.display = 'none';
             document.getElementById('score-ctrls').style.display = 'block';
             
-            // GATEKEEPER: CLOSE
             if(rRef) rRef.child('buzzerState').set('closed');
 
             const area = document.getElementById('team-btns'); 
             area.innerHTML = "";
             for(let i=1; i<=teamMax; i++) {
+                // Pass dynamic 'currentQValue' to the adjuster
                 area.innerHTML += `
                 <div style="text-align:center;">
                     <div style="font-weight:bold; color:#aaa; margin-bottom:5px;">TEAM ${i}</div>
-                    <button onclick="adjustScore(${i}, 200)" class="score-btn s-plus">+</button>
-                    <button onclick="adjustScore(${i}, -200)" class="score-btn s-minus">-</button>
+                    <button onclick="adjustScore(${i}, ${currentQValue})" class="score-btn s-plus">+${currentQValue}</button>
+                    <button onclick="adjustScore(${i}, -${currentQValue})" class="score-btn s-minus">-${currentQValue}</button>
                 </div>`;
             }
         }
@@ -230,12 +235,10 @@
         function closeTheater() { 
             document.getElementById('theater').style.display = 'none'; 
             rRef.child('currentBuzz').set(null); 
-            // GATEKEEPER: RESET
             if(rRef) rRef.child('buzzerState').set('closed');
             if(musicPlaying) audio.volume = 0.2; 
         }
 
-        // --- NEW: GENERIC SCORE ADJUSTER ---
         function adjustScore(t, amount) { 
             const current = parseInt(document.getElementById('score-'+t).innerText); 
             rRef.child('scores/team'+t).set(current + amount); 
