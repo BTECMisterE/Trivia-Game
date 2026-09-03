@@ -206,6 +206,8 @@ let rRef = null, iRef = null, roomName = null;
 let teamMax = 3, monitorOn = false;
 let currentQValue = 200, currentBuzz = null;
 let ddCell = null, ddTeam = null, ddWager = 0, isDailyDouble = false;
+let lockedSet = new Set();          // teams that already answered this clue wrong
+let answerShown = false;
 let heartbeatTimer = null;
 let boardData = null;
 
@@ -360,6 +362,8 @@ function loadBoard() {
 function openClue(item, points, cIdx, r) {
     currentQValue = points;
     isDailyDouble = !!(ddCell && ddCell.c === cIdx && ddCell.r === r);
+    lockedSet.clear();
+    answerShown = false;
 
     document.getElementById('theater').style.display = 'flex';
     document.getElementById('t-final').style.display = 'none';
@@ -437,24 +441,24 @@ function ddConfirmWager() {
     document.getElementById('a-box').innerText = window.__ddItem.a;
     document.getElementById('a-box').style.display = 'none';
     document.getElementById('rev-btn').style.display = 'block';
-    document.getElementById('score-ctrls').style.display = 'none';
     document.getElementById('buzzer-notif').style.display = 'block';
     document.getElementById('th-user').innerText = "DAILY DOUBLE";
     document.getElementById('th-team').innerText = "TEAM " + ddTeam + " wagered $" + v;
 
+    // the wagering team owns this clue outright, so judge as soon as it's up
     currentBuzz = { user: "Daily Double", team: ddTeam };
+    document.getElementById('score-ctrls').style.display = 'block';
+    renderVerdict();
     HCAudio.beep();
     if (monitorOn) HCAudio.heartbeat(84);
 }
 
-/* ---------- reveal + verdict ---------- */
-function reveal() {
-    document.getElementById('a-box').style.display = 'block';
-    document.getElementById('rev-btn').style.display = 'none';
-    document.getElementById('score-ctrls').style.display = 'block';
-    rRef.child('buzzerState').set('closed');
-    HCAudio.stopHeartbeat();
-
+/* ---------- verdict ----------
+   The judge buttons appear the MOMENT a team buzzes in - the host marks the
+   spoken answer right then. The written answer stays hidden until the clue is
+   actually over, otherwise marking a team wrong would reopen the buzzer with
+   the answer already up on the projector. */
+function renderVerdict() {
     const verdict = document.getElementById('verdict-area');
     const manual  = document.getElementById('team-btns');
     verdict.innerHTML = "";
@@ -464,11 +468,20 @@ function reveal() {
 
     if (bTeam) {
         verdict.innerHTML =
-            '<p style="font-size:1.2em; color:#aaa;">Team ' + bTeam + ' answered &middot; this clue is worth $' + currentQValue + '</p>' +
+            '<p style="font-size:1.2em; color:#aaa;">' +
+                '<b style="color:#fff;">Team ' + bTeam + '</b> buzzed in &middot; worth $' + currentQValue +
+            '</p>' +
             '<button class="btn-green score-btn" style="padding:16px 28px; font-size:1.2em;" onclick="verdictCorrect(' + bTeam + ')">&#10004; CORRECT  +$' + currentQValue + '</button>' +
             '<button class="btn-red score-btn" style="padding:16px 28px; font-size:1.2em;" onclick="verdictWrong(' + bTeam + ')">&#10008; INCORRECT  -$' + currentQValue + '</button>';
-    } else {
+    } else if (answerShown) {
         verdict.innerHTML = '<p style="color:#aaa;">Nobody buzzed. Award manually if you want:</p>';
+    } else {
+        verdict.innerHTML = '<p style="color:#aaa;">Waiting for a buzz&hellip;</p>';
+    }
+
+    if (lockedSet.size) {
+        verdict.innerHTML += '<p style="color:#e94560; font-size:0.85em; margin-top:8px;">Locked out: Team ' +
+            Array.from(lockedSet).sort().join(', Team ') + '</p>';
     }
 
     // manual override row, always available
@@ -482,25 +495,72 @@ function reveal() {
     }
 }
 
+/* Shows the written answer to the room. Ends the clue - the buzzer closes. */
+function reveal() {
+    answerShown = true;
+    document.getElementById('a-box').style.display = 'block';
+    document.getElementById('rev-btn').style.display = 'none';
+    document.getElementById('score-ctrls').style.display = 'block';
+    if (rRef) rRef.child('buzzerState').set('closed');
+    HCAudio.stopHeartbeat();
+    renderVerdict();
+}
+
 function verdictCorrect(team) {
     addScore(team, currentQValue);
     HCAudio.correct();
-    closeTheater();
+    if (rRef) { rRef.child('currentBuzz').set(null); rRef.child('buzzerState').set('closed'); }
+    currentBuzz = null;
+    HCAudio.stopHeartbeat();
+
+    // show the answer so the class sees the confirmation, then wait for BACK TO BOARD
+    answerShown = true;
+    document.getElementById('a-box').style.display = 'block';
+    document.getElementById('rev-btn').style.display = 'none';
+    document.getElementById('buzzer-notif').style.display = 'none';
+    document.getElementById('team-btns').innerHTML = "";
+    document.getElementById('verdict-area').innerHTML =
+        '<p style="font-size:1.4em; color:#28a745;">&#10004; Team ' + team + '  +$' + currentQValue + '</p>';
 }
 
 function verdictWrong(team) {
     addScore(team, -currentQValue);
     HCAudio.flatline();
-    if (isDailyDouble) { closeTheater(); return; }   // a Daily Double is one team's alone
+    if (isDailyDouble) {                       // a Daily Double belongs to one team alone
+        answerShown = true;
+        document.getElementById('a-box').style.display = 'block';
+        document.getElementById('rev-btn').style.display = 'none';
+        document.getElementById('buzzer-notif').style.display = 'none';
+        document.getElementById('team-btns').innerHTML = "";
+        document.getElementById('verdict-area').innerHTML =
+            '<p style="font-size:1.4em; color:#e94560;">&#10008; Team ' + team + '  -$' + currentQValue + '</p>';
+        if (rRef) { rRef.child('currentBuzz').set(null); rRef.child('buzzerState').set('closed'); }
+        currentBuzz = null;
+        return;
+    }
+
     // lock that team out and reopen the buzzer for everyone else
+    lockedSet.add(team);
     rRef.child('lockedTeams/team' + team).set(true);
     rRef.child('currentBuzz').set(null);
-    rRef.child('buzzerState').set('open');
     currentBuzz = null;
-    document.getElementById('a-box').style.display = 'none';
-    document.getElementById('rev-btn').style.display = 'block';
-    document.getElementById('score-ctrls').style.display = 'none';
     document.getElementById('buzzer-notif').style.display = 'none';
+
+    if (lockedSet.size >= teamMax) {           // everyone has missed it - nobody left to buzz
+        log("All teams locked out.");
+        rRef.child('buzzerState').set('closed');
+        answerShown = true;
+        document.getElementById('a-box').style.display = 'block';
+        document.getElementById('rev-btn').style.display = 'none';
+        document.getElementById('team-btns').innerHTML = "";
+        document.getElementById('verdict-area').innerHTML =
+            '<p style="font-size:1.2em; color:#e94560;">No team got it.</p>';
+        HCAudio.stopHeartbeat();
+        return;
+    }
+
+    rRef.child('buzzerState').set('open');
+    renderVerdict();
     log("Team " + team + " locked out; buzzer reopened.");
     if (monitorOn) HCAudio.heartbeat(88);
 }
@@ -515,6 +575,7 @@ function closeTheater() {
         rRef.child('lockedTeams').set(null);
     }
     currentBuzz = null; isDailyDouble = false; ddTeam = null;
+    lockedSet.clear(); answerShown = false;
     HCAudio.stopHeartbeat();
     if (monitorOn) HCAudio.heartbeat(56);
 }
@@ -552,6 +613,9 @@ function setupBuzzerListener() {
             document.getElementById('th-team').innerText = "TEAM " + (v.team || "?");
             HCAudio.stopHeartbeat();
             HCAudio.buzzIn();
+            // judge immediately - no need to reveal the answer first
+            document.getElementById('score-ctrls').style.display = 'block';
+            renderVerdict();
         } else {
             if (!isDailyDouble) currentBuzz = null;
             notif.style.display = 'none';
