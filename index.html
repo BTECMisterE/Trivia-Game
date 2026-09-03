@@ -104,7 +104,7 @@
         <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:18px;"></div>
         <div id="score-ctrls" style="display:none;">
             <div id="verdict-area"></div>
-            <div id="team-btns" style="display:flex; gap:20px; justify-content:center; margin-top:14px;"></div>
+            <div id="team-btns" style="margin-top:18px;"></div>
             <button onclick="closeTheater()" class="btn-grey" style="margin-top:20px; width:220px;">BACK TO BOARD</button>
         </div>
     </div>
@@ -159,35 +159,157 @@
 <script>
 /* ============================================================
    HEALTHCARE AUDIO  (Web Audio API - synthesized, no files)
+   Everything runs through a master bus: soft-knee compressor so nothing
+   clips on a classroom projector speaker, plus a short plate-ish reverb
+   so the cues sit in a room instead of sounding like a calculator.
    ============================================================ */
 const HCAudio = (function () {
-    let ctx = null, hbTimer = null;
+    let ctx = null, master = null, wet = null, hbTimer = null, hbGain = null;
+
+    function buildReverb(c, seconds, decay) {
+        const len = Math.floor(c.sampleRate * seconds);
+        const buf = c.createBuffer(2, len, c.sampleRate);
+        for (let ch = 0; ch < 2; ch++) {
+            const d = buf.getChannelData(ch);
+            for (let i = 0; i < len; i++) {
+                d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+            }
+        }
+        const cv = c.createConvolver(); cv.buffer = buf; return cv;
+    }
+
     function ac() {
-        if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+        if (!ctx) {
+            try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+            const comp = ctx.createDynamicsCompressor();
+            comp.threshold.value = -14; comp.knee.value = 26;
+            comp.ratio.value = 5; comp.attack.value = 0.004; comp.release.value = 0.22;
+            master = ctx.createGain(); master.gain.value = 0.85;
+            master.connect(comp); comp.connect(ctx.destination);
+
+            const verb = buildReverb(ctx, 1.5, 2.6);
+            wet = ctx.createGain(); wet.gain.value = 0.16;
+            wet.connect(verb); verb.connect(comp);
+        }
         if (ctx.state === 'suspended') ctx.resume();
         return ctx;
     }
-    function tone(freq, delay, dur, type, gain, sweepTo) {
+
+    /* one voice: oscillator -> lowpass -> ADSR -> master (+ reverb send) */
+    function voice(o) {
         const c = ac(); if (!c) return;
-        const t0 = c.currentTime + delay;
-        const o = c.createOscillator(), g = c.createGain();
-        o.type = type || 'sine';
-        o.frequency.setValueAtTime(freq, t0);
-        if (sweepTo) o.frequency.exponentialRampToValueAtTime(sweepTo, t0 + dur);
+        const t0   = c.currentTime + (o.delay || 0);
+        const dur  = o.dur || 0.2;
+        const peak = o.gain === undefined ? 0.3 : o.gain;
+        const atk  = o.attack === undefined ? 0.008 : o.attack;
+        const rel  = o.release === undefined ? Math.max(0.06, dur * 0.55) : o.release;
+
+        const osc = c.createOscillator();
+        osc.type = o.type || 'sine';
+        osc.frequency.setValueAtTime(o.freq, t0);
+        if (o.sweepTo) osc.frequency.exponentialRampToValueAtTime(o.sweepTo, t0 + dur);
+        if (o.detune) osc.detune.setValueAtTime(o.detune, t0);
+
+        const lp = c.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(o.cutoff || 5200, t0);
+        lp.Q.value = o.q || 0.7;
+        if (o.cutoffTo) lp.frequency.exponentialRampToValueAtTime(o.cutoffTo, t0 + dur);
+
+        const g = c.createGain();
         g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(gain || 0.3, t0 + 0.012);
+        g.gain.exponentialRampToValueAtTime(peak, t0 + atk);
+        g.gain.setValueAtTime(peak, t0 + Math.max(atk, dur - rel));
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        o.connect(g); g.connect(c.destination);
-        o.start(t0); o.stop(t0 + dur + 0.05);
+
+        osc.connect(lp); lp.connect(g);
+        g.connect(master);
+        if (o.send !== 0) { const sg = c.createGain(); sg.gain.value = o.send || 1; g.connect(sg); sg.connect(wet); }
+        osc.start(t0); osc.stop(t0 + dur + 0.08);
     }
-    function lubDub() { tone(70, 0, 0.11, 'sine', 0.40); tone(52, 0.16, 0.14, 'sine', 0.28); }
+
+    /* filtered noise burst - gives transients some air (buzzer click, defib hiss) */
+    function noise(o) {
+        const c = ac(); if (!c) return;
+        const t0 = c.currentTime + (o.delay || 0), dur = o.dur || 0.1;
+        const len = Math.max(1, Math.floor(c.sampleRate * dur));
+        const buf = c.createBuffer(1, len, c.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        const src = c.createBufferSource(); src.buffer = buf;
+
+        const f = c.createBiquadFilter();
+        f.type = o.filter || 'bandpass';
+        f.frequency.setValueAtTime(o.freq || 2000, t0);
+        f.Q.value = o.q || 1.2;
+        if (o.freqTo) f.frequency.exponentialRampToValueAtTime(o.freqTo, t0 + dur);
+
+        const g = c.createGain();
+        g.gain.setValueAtTime(o.gain === undefined ? 0.2 : o.gain, t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+        src.connect(f); f.connect(g); g.connect(master);
+        const sg = c.createGain(); sg.gain.value = 0.5; g.connect(sg); sg.connect(wet);
+        src.start(t0); src.stop(t0 + dur);
+    }
+
+    /* a note with a little harmonic stack so it reads as an instrument, not a beep */
+    function note(freq, delay, dur, gain, bright) {
+        voice({ freq: freq,       delay: delay, dur: dur,        gain: gain,        type: 'triangle', cutoff: bright || 4200 });
+        voice({ freq: freq * 2,   delay: delay, dur: dur * 0.7,  gain: gain * 0.30, type: 'sine',     cutoff: bright || 4200 });
+        voice({ freq: freq * 3,   delay: delay, dur: dur * 0.45, gain: gain * 0.12, type: 'sine' });
+        voice({ freq: freq,       delay: delay, dur: dur,        gain: gain * 0.35, type: 'sine', detune: 7 });
+    }
+
+    /* two-thump heartbeat with a body resonance instead of a bare sine */
+    function lubDub() {
+        voice({ freq: 88, sweepTo: 44, delay: 0,    dur: 0.16, gain: 0.55, type: 'sine', attack: 0.004, cutoff: 380, send: 0.3 });
+        noise({ freq: 140, delay: 0,    dur: 0.05, gain: 0.06, filter: 'lowpass' });
+        voice({ freq: 66, sweepTo: 36, delay: 0.17, dur: 0.20, gain: 0.36, type: 'sine', attack: 0.006, cutoff: 300, send: 0.3 });
+    }
+
     return {
         unlock() { ac(); },
-        beep()    { tone(1046, 0, 0.09, 'sine', 0.30); },
-        buzzIn()  { tone(1046, 0, 0.08, 'square', 0.26); tone(1318, 0.10, 0.16, 'square', 0.26); },
-        correct() { tone(523, 0, 0.12, 'sine', 0.3); tone(659, 0.11, 0.12, 'sine', 0.3); tone(784, 0.22, 0.32, 'sine', 0.32); },
-        flatline(){ tone(880, 0, 1.10, 'sawtooth', 0.15); tone(180, 0, 1.10, 'sine', 0.10); },
-        defib()   { tone(180, 0, 1.05, 'sawtooth', 0.13, 1900); tone(48, 1.10, 0.42, 'sine', 0.5); },
+
+        /* clue opens - soft mallet ping */
+        beep() {
+            note(1174.7, 0, 0.30, 0.22, 6000);
+            noise({ freq: 5200, dur: 0.03, gain: 0.05 });
+        },
+
+        /* someone buzzed - urgent two-tone with a click transient on the front */
+        buzzIn() {
+            noise({ freq: 3000, dur: 0.035, gain: 0.16 });
+            voice({ freq: 784,  delay: 0,    dur: 0.11, gain: 0.26, type: 'square', cutoff: 2600 });
+            voice({ freq: 1174, delay: 0.10, dur: 0.22, gain: 0.26, type: 'square', cutoff: 3200 });
+            voice({ freq: 587,  delay: 0.10, dur: 0.22, gain: 0.12, type: 'triangle', cutoff: 2200 });
+        },
+
+        /* correct - rising major arpeggio landing on a held chord */
+        correct() {
+            note(523.25, 0,    0.16, 0.24);
+            note(659.25, 0.10, 0.16, 0.24);
+            note(783.99, 0.20, 0.50, 0.26, 6000);
+            note(1046.5, 0.20, 0.50, 0.14, 6000);
+            noise({ freq: 6000, delay: 0.20, dur: 0.05, gain: 0.04 });
+        },
+
+        /* wrong - descending minor drop, then the monitor flatline underneath */
+        flatline() {
+            note(392.00, 0,    0.14, 0.22);
+            note(311.13, 0.12, 0.34, 0.22);
+            voice({ freq: 880, delay: 0.30, dur: 1.10, gain: 0.10, type: 'sine', cutoff: 2400, attack: 0.02, release: 0.5 });
+            voice({ freq: 440, delay: 0.30, dur: 1.10, gain: 0.05, type: 'sine', cutoff: 1800, attack: 0.02, release: 0.5 });
+        },
+
+        /* daily double - charge-up whine, then the thump */
+        defib() {
+            voice({ freq: 160, sweepTo: 2100, delay: 0, dur: 1.00, gain: 0.13, type: 'sawtooth', cutoff: 900, cutoffTo: 7000, attack: 0.3 });
+            noise({ freq: 800, freqTo: 6000, delay: 0.2, dur: 0.8, gain: 0.04 });
+            voice({ freq: 120, sweepTo: 34, delay: 1.02, dur: 0.55, gain: 0.6, type: 'sine', attack: 0.003, cutoff: 400, send: 0.4 });
+            noise({ freq: 2500, delay: 1.02, dur: 0.12, gain: 0.14, filter: 'highpass' });
+        },
+
         lubDub,
         heartbeat(bpm) { this.stopHeartbeat(); lubDub(); hbTimer = setInterval(lubDub, 60000 / (bpm || 66)); },
         stopHeartbeat() { if (hbTimer) { clearInterval(hbTimer); hbTimer = null; } }
@@ -484,15 +606,26 @@ function renderVerdict() {
             Array.from(lockedSet).sort().join(', Team ') + '</p>';
     }
 
-    // manual override row, always available
+    /* Manual override is hidden by default - with it always on screen it was far
+       too easy to award the wrong team. It never shows while a team is buzzed in;
+       in that state the only controls are CORRECT / INCORRECT for that team. */
+    if (bTeam) return;
+
+    let rows = "";
     for (let i = 1; i <= teamMax; i++) {
-        manual.innerHTML +=
+        rows +=
             '<div style="text-align:center;">' +
             '<div style="font-weight:bold; color:#aaa; margin-bottom:5px;">TEAM ' + i + '</div>' +
             '<button onclick="addScore(' + i + ',' + currentQValue + ')" class="score-btn s-plus">+' + currentQValue + '</button>' +
             '<button onclick="addScore(' + i + ',' + (-currentQValue) + ')" class="score-btn s-minus">-' + currentQValue + '</button>' +
             '</div>';
     }
+    manual.innerHTML =
+        '<div style="width:100%; text-align:center;">' +
+          '<button class="btn-grey" style="width:auto; padding:6px 14px; font-size:0.85em; opacity:0.75;" ' +
+                  'onclick="toggleManual()">&#9881; Manual score adjust</button>' +
+          '<div id="manual-rows" style="display:none; justify-content:center; gap:20px; margin-top:12px;">' + rows + '</div>' +
+        '</div>';
 }
 
 /* Shows the written answer to the room. Ends the clue - the buzzer closes. */
@@ -581,6 +714,11 @@ function closeTheater() {
 }
 
 /* transaction, not a DOM read - two open boards can no longer clobber each other */
+function toggleManual() {
+    const r = document.getElementById('manual-rows');
+    if (r) r.style.display = (r.style.display === 'none' ? 'flex' : 'none');
+}
+
 function addScore(team, amount) {
     rRef.child('scores/team' + team).transaction(function (v) { return (v || 0) + amount; });
 }
