@@ -1,213 +1,401 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="utf-8">
     <title>Student Buzzer</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
-        .card { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; max-width: 350px; margin: 0 auto; }
+        * { box-sizing: border-box; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 15px; margin: 0; }
+        .card { background: #111; padding: 20px; border-radius: 10px; border: 2px solid #00d2ff; max-width: 360px; margin: 0 auto; }
         input, select, button { width: 90%; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 1.1em; }
-        
-        #buzzer { 
-            background: #444; 
-            color: #aaa; 
-            height: 250px; 
-            width: 250px; 
-            border-radius: 50%; 
-            border: 8px solid #555; 
-            display: none; 
-            margin: 40px auto; 
-            font-weight: bold; 
-            font-size: 2em;
-            cursor: not-allowed;
-            transition: all 0.2s;
+
+        #conn { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); font-size: 0.75em;
+                padding: 4px 12px; border-radius: 20px; background: #222; border: 1px solid #444; z-index: 50; }
+        #conn.ok  { color: #00ff88; border-color: #00ff88; }
+        #conn.bad { color: #ff9900; border-color: #ff9900; }
+
+        #buzzer {
+            background: #444; color: #aaa; height: 250px; width: 250px; border-radius: 50%;
+            border: 8px solid #555; display: none; margin: 30px auto; font-weight: bold;
+            font-size: 2em; cursor: not-allowed; transition: all 0.2s;
+            -webkit-tap-highlight-color: transparent; touch-action: manipulation;
         }
-        
-        #buzzer.active {
-            background: radial-gradient(#00ff00, #006600);
-            color: black;
-            border-color: white;
-            cursor: pointer;
-            box-shadow: 0 0 30px rgba(0, 255, 0, 0.5);
-        }
-        
-        #buzzer.locked {
-            background: radial-gradient(#ff0055, #80002b);
-            color: white;
-            border-color: white;
-            cursor: not-allowed;
-        }
-        
-        #msg { margin-top: 20px; font-weight: bold; font-size: 1.2em; }
-        #recon-msg { color: #00d2ff; font-size: 0.9em; margin-bottom: 10px; display:none; }
+        #buzzer.active { background: radial-gradient(#00ff00, #006600); color: black; border-color: white;
+                         cursor: pointer; box-shadow: 0 0 30px rgba(0,255,0,0.5); }
+        #buzzer.locked { background: radial-gradient(#ff0055, #80002b); color: white; border-color: white; cursor: not-allowed; }
+        #buzzer.out    { background: radial-gradient(#555, #222); color: #888; border-color: #444; cursor: not-allowed; }
+
+        #msg { margin-top: 15px; font-weight: bold; font-size: 1.2em; }
+        #recon-msg { color: #00d2ff; font-size: 0.9em; margin-bottom: 10px; display: none; }
         #scan-status { font-size: 0.8em; color: #aaa; margin-top: -5px; margin-bottom: 10px; }
+        #score-pill { font-size: 0.95em; color: #ffd700; margin-bottom: 6px; }
+
+        #final-sec { display: none; max-width: 360px; margin: 0 auto; background: #111;
+                     border: 2px solid #ffd700; border-radius: 10px; padding: 20px; }
+        #final-sec h3 { color: #ffd700; margin-top: 0; }
+        .fj-note { font-size: 0.85em; color: #aaa; }
+        .btn-gold { background: #ffd700; color: black; border: none; font-weight: bold; }
+        .btn-cyan { background: #00d2ff; color: black; border: none; font-weight: bold; }
+        .ecg { height: 28px; margin: 4px 0 10px; opacity: 0.8; }
     </style>
 </head>
 <body>
 
-    <div id="login-sec" class="card">
-        <h2>STUDENT JOIN</h2>
-        <input type="text" id="p-name" placeholder="Enter Your Name">
-        
-        <select id="room-list">
-            <option value="">Connecting...</option>
-        </select>
-        <div id="scan-status">Connecting to Database...</div>
+<div id="conn" class="bad">connecting...</div>
 
-        <button onclick="join()" style="background:#00d2ff; color:black; border:none; font-weight:bold;">JOIN GAME</button>
-    </div>
+<div id="login-sec" class="card">
+    <h2>STUDENT JOIN</h2>
+    <svg class="ecg" viewBox="0 0 200 28" preserveAspectRatio="none">
+        <polyline points="0,14 40,14 48,14 54,4 60,24 66,14 90,14 130,14 138,14 144,6 150,22 156,14 200,14"
+                  fill="none" stroke="#00d2ff" stroke-width="2"/>
+    </svg>
+    <input type="text" id="p-name" placeholder="Enter Your Name" autocomplete="off">
+    <select id="room-list"><option value="">Connecting...</option></select>
+    <div id="scan-status">Connecting to Database...</div>
+    <button class="btn-cyan" onclick="join()">JOIN GAME</button>
+</div>
 
-    <div id="game-sec" style="display:none;">
-        <div id="recon-msg">⚡ RECONNECTED TO TEAM</div>
-        <h3 id="team-notif" style="color:#aaa;">Waiting for Teacher to Shuffle...</h3>
-        <button id="buzzer" onclick="buzz()" disabled>WAIT...</button>
-        <div id="msg"></div>
-    </div>
+<div id="game-sec" style="display:none;">
+    <div id="recon-msg">&#9889; RECONNECTED TO TEAM</div>
+    <div id="score-pill"></div>
+    <h3 id="team-notif" style="color:#aaa;">Waiting for Teacher to Shuffle...</h3>
+    <button id="buzzer" onclick="buzz()" disabled>WAIT...</button>
+    <div id="msg"></div>
+</div>
 
-    <script>
-        const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
-        firebase.initializeApp(config);
-        const db = firebase.database();
+<div id="final-sec">
+    <h3>&#127942; FINAL JEOPARDY</h3>
+    <div id="fj-body"></div>
+</div>
 
-        // --- ROBUST ROOM SCANNER ---
-        const statusDiv = document.getElementById('scan-status');
-        const drop = document.getElementById('room-list');
+<script>
+/* ============================================================
+   HEALTHCARE AUDIO  (Web Audio API - synthesized, no files)
+   ============================================================ */
+const HCAudio = (function () {
+    let ctx = null, hbTimer = null;
+    function ac() {
+        if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+        if (ctx.state === 'suspended') ctx.resume();
+        return ctx;
+    }
+    function tone(freq, delay, dur, type, gain, sweepTo) {
+        const c = ac(); if (!c) return;
+        const t0 = c.currentTime + delay;
+        const o = c.createOscillator(), g = c.createGain();
+        o.type = type || 'sine';
+        o.frequency.setValueAtTime(freq, t0);
+        if (sweepTo) o.frequency.exponentialRampToValueAtTime(sweepTo, t0 + dur);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(gain || 0.3, t0 + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.connect(g); g.connect(c.destination);
+        o.start(t0); o.stop(t0 + dur + 0.05);
+    }
+    function lubDub() { tone(70, 0, 0.11, 'sine', 0.45); tone(52, 0.16, 0.14, 'sine', 0.32); }
+    return {
+        unlock() { ac(); },
+        beep()    { tone(1046, 0, 0.09, 'sine', 0.35); },
+        buzzIn()  { tone(1046, 0, 0.08, 'square', 0.28); tone(1318, 0.10, 0.16, 'square', 0.28); },
+        correct() { tone(523, 0, 0.12, 'sine', 0.3); tone(659, 0.11, 0.12, 'sine', 0.3); tone(784, 0.22, 0.30, 'sine', 0.32); },
+        flatline(){ tone(880, 0, 1.10, 'sawtooth', 0.16); tone(180, 0, 1.10, 'sine', 0.10); },
+        defib()   { tone(180, 0, 1.05, 'sawtooth', 0.13, 1900); tone(48, 1.10, 0.40, 'sine', 0.5); },
+        lubDub,
+        heartbeat(bpm) {
+            this.stopHeartbeat();
+            lubDub();
+            hbTimer = setInterval(lubDub, 60000 / (bpm || 66));
+        },
+        stopHeartbeat() { if (hbTimer) { clearInterval(hbTimer); hbTimer = null; } }
+    };
+})();
+document.addEventListener('touchstart', function () { HCAudio.unlock(); }, { once: true });
+document.addEventListener('click',      function () { HCAudio.unlock(); }, { once: true });
 
-        db.ref('rooms').on('value', (snapshot) => {
-            drop.innerHTML = '<option value="">-- Select Room --</option>';
-            let count = 0;
+/* ============================================================
+   FIREBASE
+   ============================================================ */
+const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
+firebase.initializeApp(config);
+const db = firebase.database();
 
-            if (!snapshot.exists()) {
-                statusDiv.innerText = "No rooms found in database.";
-                return;
-            }
+const LS_KEY = 'triviaSession_v2';
+const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 
-            snapshot.forEach((child) => {
-                const val = child.val();
-                // Check if room is valid AND active
-                if (val && val.metadata && val.metadata.status === 'active') {
-                    let o = document.createElement('option');
-                    o.value = child.key;
-                    o.innerText = child.key;
-                    drop.appendChild(o);
-                    count++;
-                }
+let myRoom = null, myId = null, myName = null, myTeam = 0, myScore = 0;
+let rRef = null, pRef = null;
+let lastBuzzUser = null, wasOpen = false;
+let scoreRef = null, lockRef = null;
+let fjRendered = null;
+
+const state = { buzzerState: 'closed', currentBuzz: null, phase: 'board', finalStage: null, iAmLockedOut: false };
+
+/* ---------- room list: reads the tiny roomIndex, not every room's players ---------- */
+const statusDiv = document.getElementById('scan-status');
+const drop = document.getElementById('room-list');
+
+db.ref('roomIndex').on('value', function (snap) {
+    const keep = drop.value;
+    drop.innerHTML = '<option value="">-- Select Room --</option>';
+    let count = 0;
+    const now = Date.now();
+    snap.forEach(function (child) {
+        const v = child.val();
+        if (!v || v.status !== 'active') return;
+        if (v.lastSeen && (now - v.lastSeen) > ROOM_TTL_MS) return;
+        const o = document.createElement('option');
+        o.value = child.key; o.innerText = child.key;
+        drop.appendChild(o); count++;
+    });
+    if (keep) drop.value = keep;
+    if (count === 0) {
+        statusDiv.innerText = "No ACTIVE rooms found. (Is Teacher Board open?)";
+        statusDiv.style.color = "orange";
+    } else {
+        statusDiv.innerText = "Found " + count + " active room(s).";
+        statusDiv.style.color = "#00ff00";
+    }
+}, function (err) { statusDiv.innerText = "Error: " + err.message; statusDiv.style.color = "red"; });
+
+/* ---------- connection indicator + presence recovery ---------- */
+const connPill = document.getElementById('conn');
+db.ref('.info/connected').on('value', function (s) {
+    const online = s.val() === true;
+    connPill.className = online ? 'ok' : 'bad';
+    connPill.innerText = online ? '● connected' : '● reconnecting...';
+    if (online && myRoom && myId) reassertPresence();
+});
+
+/* Re-create our player record if a blip or a teacher reset wiped it, and re-arm
+   the onDisconnect flag. This is what makes a screen lock survivable. */
+function reassertPresence() {
+    pRef.once('value').then(function (snap) {
+        if (!snap.exists()) {
+            pRef.set({ name: myName, team: myTeam || 0, online: true, joined: Date.now() });
+        } else {
+            pRef.child('online').set(true);
+            const t = snap.child('team').val();
+            if (t) myTeam = t;
+        }
+        pRef.child('online').onDisconnect().set(false);
+    }).catch(function () {});
+}
+
+/* ---------- join / auto-rejoin ---------- */
+function join() {
+    const name = document.getElementById('p-name').value.trim();
+    const room = document.getElementById('room-list').value;
+    if (!name || !room) return alert("Please enter your name and select a room!");
+    HCAudio.unlock();
+
+    db.ref('rooms/' + room + '/players').once('value', function (snapshot) {
+        let existingId = null;
+        if (snapshot.exists()) {
+            snapshot.forEach(function (child) {
+                const p = child.val();
+                if (p && p.name && p.name.toLowerCase() === name.toLowerCase()) existingId = child.key;
             });
+        }
+        const isRecon = !!existingId;
+        const id = existingId || (name.replace(/\s+/g, '_') + "_" + Math.floor(Math.random() * 100000));
+        startGame(room, id, name, isRecon);
+    });
+}
 
-            if (count === 0) {
-                statusDiv.innerText = "No ACTIVE rooms found. (Is Teacher Board open?)";
-                statusDiv.style.color = "orange";
-            } else {
-                statusDiv.innerText = "Found " + count + " active room(s).";
-                statusDiv.style.color = "#00ff00";
-            }
-        }, (error) => {
-            statusDiv.innerText = "Error: " + error.message;
-            statusDiv.style.color = "red";
+function autoRejoin() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) { }
+    if (!s || !s.room || !s.id || !s.name) return;
+    db.ref('roomIndex/' + s.room).once('value').then(function (snap) {
+        const v = snap.val();
+        if (!v || v.status !== 'active') return;
+        if (v.lastSeen && (Date.now() - v.lastSeen) > ROOM_TTL_MS) return;
+        myTeam = s.team || 0;
+        startGame(s.room, s.id, s.name, true);
+    }).catch(function () {});
+}
+
+function startGame(room, id, name, isReconnected) {
+    myRoom = room; myId = id; myName = name;
+    rRef = db.ref('rooms/' + room);
+    pRef = rRef.child('players/' + id);
+
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ room: room, id: id, name: name, team: myTeam })); } catch (e) { }
+
+    document.getElementById('login-sec').style.display = 'none';
+    document.getElementById('game-sec').style.display = 'block';
+    if (isReconnected) document.getElementById('recon-msg').style.display = 'block';
+
+    reassertPresence();
+
+    /* NARROW listeners. We never subscribe to the whole room node, so a team
+       shuffle no longer pushes every player record to every phone. */
+    pRef.child('team').on('value', function (s) {
+        myTeam = s.val() || 0;
+        try {
+            const st = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+            st.team = myTeam; localStorage.setItem(LS_KEY, JSON.stringify(st));
+        } catch (e) { }
+        const b = document.getElementById('buzzer');
+        const notif = document.getElementById('team-notif');
+        if (myTeam > 0) {
+            notif.innerText = "TEAM " + myTeam;
+            notif.style.color = "#00ff00";
+            b.style.display = 'block';
+            watchMyScore();
+            watchMyLock();
+        } else {
+            b.style.display = 'none';
+            notif.innerText = "Wait for Teacher to Shuffle...";
+            notif.style.color = "#aaa";
+        }
+        render();
+    });
+
+    rRef.child('buzzerState').on('value', function (s) { state.buzzerState = s.val() || 'closed'; render(); });
+    rRef.child('currentBuzz').on('value',  function (s) { state.currentBuzz = s.val() || null;   render(); });
+    rRef.child('phase').on('value',        function (s) { state.phase = s.val() || 'board';      render(); });
+    rRef.child('final/stage').on('value',  function (s) { state.finalStage = s.val() || null;    render(); });
+}
+
+function watchMyScore() {
+    if (scoreRef) scoreRef.off();
+    scoreRef = rRef.child('scores/team' + myTeam);
+    scoreRef.on('value', function (s) {
+        myScore = s.val() || 0;
+        document.getElementById('score-pill').innerText = "Team " + myTeam + " score: $" + myScore;
+    });
+}
+function watchMyLock() {
+    if (lockRef) lockRef.off();
+    lockRef = rRef.child('lockedTeams/team' + myTeam);
+    lockRef.on('value', function (s) { state.iAmLockedOut = s.val() === true; render(); });
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function render() {
+    const gameSec  = document.getElementById('game-sec');
+    const finalSec = document.getElementById('final-sec');
+
+    if (state.phase === 'final' && myTeam > 0) {
+        gameSec.style.display = 'none';
+        finalSec.style.display = 'block';
+        renderFinal();
+        return;
+    }
+    finalSec.style.display = 'none';
+    fjRendered = null;
+    if (myRoom) gameSec.style.display = 'block';
+
+    const btn = document.getElementById('buzzer');
+    const msg = document.getElementById('msg');
+    if (!btn) return;
+
+    const cb = state.currentBuzz;
+
+    if (cb && cb.user) {
+        btn.disabled = true; btn.className = "locked"; btn.innerText = "LOCKED";
+        const mine = (cb.id === myId) || (cb.user === myName);
+        msg.innerText = mine ? "YOU BUZZED!" : cb.user + " buzzed!";
+        msg.style.color = "#ff0055";
+        if (cb.user !== lastBuzzUser) { HCAudio.stopHeartbeat(); HCAudio.buzzIn(); lastBuzzUser = cb.user; }
+        wasOpen = false;
+    } else if (state.iAmLockedOut) {
+        lastBuzzUser = null;
+        btn.disabled = true; btn.className = "out"; btn.innerText = "OUT";
+        msg.innerText = "Your team already answered - other teams only.";
+        msg.style.color = "#888";
+        HCAudio.stopHeartbeat(); wasOpen = false;
+    } else if (state.buzzerState === 'closed') {
+        lastBuzzUser = null;
+        btn.disabled = true; btn.className = ""; btn.innerText = "WAIT...";
+        msg.innerText = "Wait for question..."; msg.style.color = "#aaa";
+        HCAudio.stopHeartbeat(); wasOpen = false;
+    } else {
+        lastBuzzUser = null;
+        btn.disabled = false; btn.className = "active"; btn.innerText = "BUZZ!";
+        msg.innerText = "GO!"; msg.style.color = "#00ff00";
+        if (!wasOpen) { HCAudio.beep(); HCAudio.heartbeat(72); wasOpen = true; }
+    }
+}
+
+function buzz() {
+    if (!myTeam || state.iAmLockedOut) return;
+    HCAudio.unlock();
+    rRef.child('currentBuzz').transaction(function (c) {
+        return c === null ? { user: myName, team: myTeam, id: myId, at: Date.now() } : undefined;
+    });
+    if (navigator.vibrate) navigator.vibrate(100);
+}
+
+/* ============================================================
+   FINAL JEOPARDY  (secret wagers typed on each team's phone)
+   ============================================================ */
+function renderFinal() {
+    const body = document.getElementById('fj-body');
+    const stage = state.finalStage;
+    if (fjRendered === stage) return;   // don't wipe what the student is typing
+    fjRendered = stage;
+
+    if (stage === 'wager') {
+        const cap = Math.max(myScore, 1000);
+        body.innerHTML =
+            '<p class="fj-note">Team ' + myTeam + ' &middot; score $' + myScore + '</p>' +
+            '<p>Secretly wager up to <b>$' + cap + '</b>:</p>' +
+            '<input type="number" id="fj-wager" min="0" max="' + cap + '" step="100" placeholder="0">' +
+            '<button class="btn-gold" onclick="submitWager(' + cap + ')">LOCK IN WAGER</button>' +
+            '<div id="fj-status" class="fj-note"></div>';
+        rRef.child('final/wagers/team' + myTeam).once('value').then(function (s) {
+            const el = document.getElementById('fj-status');
+            if (s.exists() && el) el.innerText = "Wager locked: $" + s.val();
         });
+        HCAudio.heartbeat(84);
+    } else if (stage === 'answer') {
+        HCAudio.stopHeartbeat();
+        body.innerHTML =
+            '<p class="fj-note">Team ' + myTeam + '</p>' +
+            '<p>Read the board, then type your answer:</p>' +
+            '<input type="text" id="fj-answer" placeholder="Your answer" autocomplete="off">' +
+            '<button class="btn-gold" onclick="submitAnswer()">LOCK IN ANSWER</button>' +
+            '<div id="fj-status" class="fj-note"></div>';
+        HCAudio.heartbeat(96);
+    } else {
+        HCAudio.stopHeartbeat();
+        body.innerHTML = '<p class="fj-note">Final Jeopardy complete.</p>' +
+                         '<p style="font-size:1.3em; color:#ffd700;">Team ' + myTeam + ': $' + myScore + '</p>';
+    }
+}
 
-        // --- JOIN / RECONNECT LOGIC ---
-        function join() {
-            const name = document.getElementById('p-name').value.trim();
-            const room = document.getElementById('room-list').value;
-            
-            if(!name || !room) return alert("Please enter your name and select a room!");
+function submitWager(cap) {
+    const el = document.getElementById('fj-wager');
+    let v = parseInt(el.value, 10);
+    if (isNaN(v) || v < 0) v = 0;
+    if (v > cap) v = cap;
+    rRef.child('final/wagers/team' + myTeam).set(v);
+    document.getElementById('fj-status').innerText = "Wager locked: $" + v;
+    el.disabled = true;
+    HCAudio.beep();
+}
+function submitAnswer() {
+    const el = document.getElementById('fj-answer');
+    const v = (el.value || '').trim();
+    rRef.child('final/answers/team' + myTeam).set(v || '(no answer)');
+    document.getElementById('fj-status').innerText = "Answer locked in.";
+    el.disabled = true;
+    HCAudio.beep();
+}
 
-            const rRef = db.ref('rooms/' + room);
-            
-            // Check for existing player to reconnect
-            rRef.child('players').once('value', snapshot => {
-                let existingId = null;
-                
-                if (snapshot.exists()) {
-                    snapshot.forEach(child => {
-                        const pData = child.val();
-                        if (pData && pData.name && pData.name.toLowerCase() === name.toLowerCase()) {
-                            existingId = child.key;
-                        }
-                    });
-                }
+/* a sleeping phone must not count as a departed student */
+document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && myRoom && myId) reassertPresence();
+});
 
-                if (existingId) {
-                    startGame(existingId, rRef, name, true);
-                } else {
-                    const newId = name.replace(/\s+/g, '_') + "_" + Math.floor(Math.random()*1000);
-                    rRef.child('players/' + newId).set({ name: name, team: 0 });
-                    rRef.child('players/' + newId).onDisconnect().remove();
-                    startGame(newId, rRef, name, false);
-                }
-            });
-        }
-
-        function startGame(id, rRef, name, isReconnected) {
-            document.getElementById('login-sec').style.display = 'none';
-            document.getElementById('game-sec').style.display = 'block';
-            
-            if(isReconnected) {
-                document.getElementById('recon-msg').style.display = 'block';
-            }
-
-            window.myRRef = rRef; 
-            window.myName = name;
-
-            // 1. Team Listener
-            rRef.child('players/' + id + '/team').on('value', s => { 
-                const team = s.val();
-                const b = document.getElementById('buzzer');
-                if(team > 0) {
-                    document.getElementById('team-notif').innerText = "TEAM " + team;
-                    document.getElementById('team-notif').style.color = "#00ff00";
-                    b.style.display = 'block'; 
-                    window.myTeam = team;
-                } else {
-                    b.style.display = 'none';
-                    document.getElementById('team-notif').innerText = "Wait for Teacher to Shuffle...";
-                }
-            });
-
-            // 2. Game State Listener (Traffic Light)
-            rRef.on('value', snap => {
-                const data = snap.val();
-                if(!data) return;
-
-                const buzzerState = data.buzzerState || 'closed';
-                const currentBuzz = data.currentBuzz || null;
-                const btn = document.getElementById('buzzer');
-                const msg = document.getElementById('msg');
-
-                if (currentBuzz && currentBuzz.user) {
-                    btn.disabled = true;
-                    btn.className = "locked";
-                    btn.innerText = "LOCKED";
-                    msg.innerText = (currentBuzz.user === name) ? "YOU BUZZED!" : currentBuzz.user + " buzzed!";
-                    msg.style.color = "#ff0055";
-                }
-                else if (buzzerState === 'closed') {
-                    btn.disabled = true;
-                    btn.className = "";
-                    btn.innerText = "WAIT...";
-                    msg.innerText = "Wait for question...";
-                    msg.style.color = "#aaa";
-                }
-                else {
-                    btn.disabled = false;
-                    btn.className = "active";
-                    btn.innerText = "BUZZ!";
-                    msg.innerText = "GO!";
-                    msg.style.color = "#00ff00";
-                }
-            });
-        }
-
-        function buzz() {
-            if (!window.myTeam) return;
-            window.myRRef.child('currentBuzz').transaction(c => {
-                return c === null ? { user: window.myName, team: window.myTeam } : undefined;
-            });
-            if (navigator.vibrate) navigator.vibrate(100);
-        }
-    </script>
+autoRejoin();
+</script>
 </body>
 </html>
