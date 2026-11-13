@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Trivia Master - Teacher Board</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; height: 100dvh; overflow: hidden; }
+        .sidebar { width: 330px; background: #111; border-right: 2px solid #00d2ff; padding: 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+        .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
+        .box { background: #222; padding: 14px; border-radius: 8px; border: 1px solid #444; margin-bottom: 8px; }
+
+        .qr-area { background: white; color: black; padding: 10px; border-radius: 8px; text-align: center; min-height: 180px; display: flex; flex-direction: column; align-items: center; }
+        #web-qr-img { width: 150px; height: 150px; display: block; margin: 0 auto; }
+        .link-input { width: 95%; padding: 5px; font-size: 10px; border: 1px solid #ccc; background: #eee; margin-top: 5px; color: #333; text-align: center; }
+
+        input, select, textarea { width: 100%; padding: 10px; background: #000; color: #fff; border: 1px solid #444; margin: 5px 0; border-radius: 4px; }
+        button { cursor: pointer; padding: 12px; font-weight: bold; border: none; border-radius: 5px; width: 100%; margin-top: 5px; }
+        .btn-blue   { background: #00d2ff; color: black; }
+        .btn-green  { background: #28a745; color: white; }
+        .btn-red    { background: #e94560; color: white; }
+        .btn-orange { background: #ff9900; color: black; }
+        .btn-gold   { background: #ffd700; color: black; }
+        .btn-grey   { background: #444; color: white; }
+
+        .grid { display: grid; gap: 10px; grid-template-columns: repeat(6, 1fr); margin-top: 20px; }
+        .cell { background: #16213e; border: 1px solid #333; color: #ffd700; font-size: 1.5em; padding: 20px 0; cursor: pointer; border-radius: 5px; min-height: 60px; display: flex; align-items: center; justify-content: center; }
+        .cell:hover { background: #1e2d55; }
+        .cell.used { opacity: 0.15; cursor: default; }
+
+        #theater { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #1a1a2e; z-index: 2000; flex-direction: column; justify-content: center; align-items: center; padding: 30px; overflow-y: auto; }
+        #buzzer-notif { background: #e94560; padding: 18px 30px; border-radius: 10px; display: none; font-size: 2em; border: 4px solid white; margin-bottom: 18px; }
+        #debug-bar { background: #fff; color: black; font-size: 10px; padding: 3px; border-radius: 3px; }
+
+        .score-btn { padding: 10px; min-width: 84px; font-size: 1em; border-radius: 5px; cursor: pointer; border: none; margin: 0 4px; font-weight: bold; width: auto; }
+        .s-plus  { background: #28a745; color: white; }
+        .s-minus { background: #e94560; color: white; }
+
+        .conn-dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#ff9900; margin-right:6px; }
+        .conn-dot.ok { background:#00ff88; }
+
+        #dd-splash { font-size: 4em; color: #ffd700; font-weight: bold; letter-spacing: 4px; text-shadow: 0 0 30px rgba(255,215,0,0.6); }
+        .team-pick { display:inline-block; width:auto; padding:14px 26px; margin:6px; font-size:1.1em; }
+        .wide { width: 620px; max-width: 92vw; }
+        .fj-row { display:flex; align-items:center; gap:12px; background:#222; padding:10px 14px; border-radius:6px; margin:6px 0; text-align:left; }
+        .fj-row .nm { flex:1; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="qr-area">
+        <img id="web-qr-img" alt="QR Loading..." src="">
+        <div style="font-weight: bold; margin-top: 5px;">SCAN TO JOIN</div>
+        <input type="text" id="student-link-box" class="link-input" oninput="manualUpdateQR()" placeholder="Link appears here...">
+        <a id="open-link-btn" href="#" target="_blank" style="font-size: 11px; color: blue; margin-top:5px; display:block;">Test Link</a>
+    </div>
+
+    <div id="debug-bar"><span id="conn-dot" class="conn-dot"></span><span id="debug-txt">System Ready</span></div>
+
+    <div class="box">
+        <strong>1. SETUP ROOM</strong>
+        <input type="text" id="r-name" value="Class1">
+        <select id="t-count">
+            <option value="2">2 Teams</option>
+            <option value="3" selected>3 Teams</option>
+            <option value="4">4 Teams</option>
+        </select>
+        <button class="btn-blue" onclick="activateRoom()">ACTIVATE ROOM</button>
+    </div>
+
+    <div id="step2-ui" class="box" style="display:none;">
+        <strong>2. SELECT LESSON</strong>
+        <select id="lib-drop" onchange="checkBuilder(this)"><option value="">Loading...</option></select>
+        <button class="btn-blue" onclick="loadBoard()">START GAME</button>
+    </div>
+
+    <div id="step3-ui" class="box" style="display:none;">
+        <strong>3. CONTROLS</strong>
+        <div id="roster-line" style="font-size:0.8em; color:#aaa; margin:6px 0;">0 players</div>
+        <button class="btn-green"  onclick="shuffleTeams()">SHUFFLE TEAMS</button>
+        <button class="btn-gold"   onclick="startFinal()">&#127942; FINAL JEOPARDY</button>
+        <button class="btn-orange" onclick="resetScores()">RESET SCORES ONLY</button>
+        <button class="btn-red"    onclick="newClass()">&#128465; NEW CLASS (Clear All)</button>
+        <button class="btn-grey"   onclick="toggleMusic()" id="music-btn">&#127925; MONITOR: OFF</button>
+        <button class="btn-grey"   onclick="endRoom()">END ROOM</button>
+    </div>
+</div>
+
+<div class="main">
+    <div id="score-display" style="display:flex; justify-content:center; gap:15px; margin-bottom: 20px; font-size: 1.5em;"></div>
+    <div id="board-grid" class="grid"></div>
+    <div id="welcome" style="margin-top:100px; color:#444;"><h1>Trivia Master Board</h1><p>Enter a room name and click Activate.</p></div>
+</div>
+
+<div id="theater">
+    <!-- normal clue -->
+    <div id="t-normal" style="display:none; width:100%; text-align:center;">
+        <div id="buzzer-notif">&#128276; <span id="th-user">NAME</span><br><small id="th-team" style="font-size:0.5em;">TEAM ?</small></div>
+        <div id="q-box" style="font-size:2.5em; padding:24px; text-align:center;"></div>
+        <button id="rev-btn" onclick="reveal()" class="btn-blue" style="width:220px;">SHOW ANSWER</button>
+        <div id="a-box" style="font-size:2em; color:#ffd700; display:none; padding:18px;"></div>
+        <div id="score-ctrls" style="display:none;">
+            <div id="verdict-area"></div>
+            <div id="team-btns" style="margin-top:18px;"></div>
+            <button onclick="closeTheater()" class="btn-grey" style="margin-top:20px; width:220px;">BACK TO BOARD</button>
+        </div>
+    </div>
+
+    <!-- daily double -->
+    <div id="t-dd" style="display:none; width:100%; text-align:center;">
+        <div id="dd-splash">DAILY DOUBLE</div>
+        <div id="dd-step1" style="margin-top:24px;">
+            <p style="font-size:1.3em; color:#aaa;">Which team uncovered it?</p>
+            <div id="dd-teams"></div>
+        </div>
+        <div id="dd-step2" style="display:none; margin-top:24px;">
+            <p style="font-size:1.3em;">Team <span id="dd-team-lbl"></span> &middot; score $<span id="dd-team-score"></span></p>
+            <p style="color:#aaa;">Wager up to <b>$<span id="dd-cap"></span></b></p>
+            <input type="number" id="dd-wager" class="wide" style="font-size:1.6em; text-align:center;" min="0" step="100" placeholder="Enter wager">
+            <button class="btn-gold" style="width:260px; margin-top:12px;" onclick="ddConfirmWager()">REVEAL THE CLUE</button>
+        </div>
+    </div>
+
+    <!-- final jeopardy -->
+    <div id="t-final" style="display:none; width:100%; text-align:center;">
+        <h1 style="color:#ffd700;">&#127942; FINAL JEOPARDY</h1>
+
+        <div id="fj-setup">
+            <textarea id="fj-q" class="wide" placeholder="Final Jeopardy question..." style="height:90px; font-size:1.1em;"></textarea>
+            <textarea id="fj-a" class="wide" placeholder="Correct answer (stays on this screen only)..." style="height:60px; font-size:1.1em;"></textarea>
+            <button class="btn-gold" style="width:300px;" onclick="fjOpenWagers()">OPEN WAGERING</button>
+            <button class="btn-grey" style="width:300px;" onclick="fjCancel()">CANCEL</button>
+        </div>
+
+        <div id="fj-wagering" style="display:none;">
+            <p style="font-size:1.2em; color:#aaa;">Teams are entering secret wagers on their phones...</p>
+            <div id="fj-wager-list"></div>
+            <button class="btn-gold" style="width:300px;" onclick="fjRevealClue()">REVEAL THE CLUE</button>
+        </div>
+
+        <div id="fj-clue" style="display:none;">
+            <div id="fj-q-box" style="font-size:2.4em; padding:24px;"></div>
+            <p style="color:#aaa;">Teams are typing answers...</p>
+            <div id="fj-answer-list"></div>
+            <button class="btn-gold" style="width:300px;" onclick="fjRevealAnswers()">REVEAL &amp; SCORE</button>
+        </div>
+
+        <div id="fj-scoring" style="display:none;">
+            <div id="fj-a-box" style="font-size:1.8em; color:#ffd700; padding:14px;"></div>
+            <div id="fj-score-list"></div>
+            <button class="btn-grey" style="width:300px; margin-top:16px;" onclick="fjFinish()">FINISH GAME</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ============================================================
+   HEALTHCARE AUDIO  (Web Audio API - synthesized, no files)
+   Everything runs through a master bus: soft-knee compressor so nothing
+   clips on a classroom projector speaker, plus a short plate-ish reverb
+   so the cues sit in a room instead of sounding like a calculator.
+   ============================================================ */
+const HCAudio = (function () {
+    let ctx = null, master = null, wet = null, hbTimer = null;
+
+    function buildReverb(c, seconds, decay) {
+        const len = Math.floor(c.sampleRate * seconds);
+        const buf = c.createBuffer(2, len, c.sampleRate);
+        for (let ch = 0; ch < 2; ch++) {
+            const d = buf.getChannelData(ch);
+            for (let i = 0; i < len; i++) {
+                d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+            }
+        }
+        const cv = c.createConvolver(); cv.buffer = buf; return cv;
+    }
+
+    function ac() {
+        if (!ctx) {
+            try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+            const comp = ctx.createDynamicsCompressor();
+            comp.threshold.value = -14; comp.knee.value = 26;
+            comp.ratio.value = 5; comp.attack.value = 0.004; comp.release.value = 0.22;
+            master = ctx.createGain(); master.gain.value = 0.85;
+            master.connect(comp); comp.connect(ctx.destination);
+
+            const verb = buildReverb(ctx, 1.5, 2.6);
+            wet = ctx.createGain(); wet.gain.value = 0.16;
+            wet.connect(verb); verb.connect(comp);
+        }
+        if (ctx.state === 'suspended') ctx.resume();
+        return ctx;
+    }
+
+    /* one voice: oscillator -> lowpass -> ADSR -> master (+ reverb send) */
+    function voice(o) {
+        const c = ac(); if (!c) return;
+        const t0   = c.currentTime + (o.delay || 0);
+        const dur  = o.dur || 0.2;
+        const peak = o.gain === undefined ? 0.3 : o.gain;
+        const atk  = o.attack === undefined ? 0.008 : o.attack;
+        const rel  = o.release === undefined ? Math.max(0.06, dur * 0.55) : o.release;
+
+        const osc = c.createOscillator();
+        osc.type = o.type || 'sine';
+        osc.frequency.setValueAtTime(o.freq, t0);
+        if (o.sweepTo) osc.frequency.exponentialRampToValueAtTime(o.sweepTo, t0 + dur);
+        if (o.detune) osc.detune.setValueAtTime(o.detune, t0);
+
+        const lp = c.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(o.cutoff || 5200, t0);
+        lp.Q.value = o.q || 0.7;
+        if (o.cutoffTo) lp.frequency.exponentialRampToValueAtTime(o.cutoffTo, t0 + dur);
+
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(peak, t0 + atk);
+        g.gain.setValueAtTime(peak, t0 + Math.max(atk, dur - rel));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+        osc.connect(lp); lp.connect(g);
+        g.connect(master);
+        if (o.send !== 0) { const sg = c.createGain(); sg.gain.value = o.send || 1; g.connect(sg); sg.connect(wet); }
+        osc.start(t0); osc.stop(t0 + dur + 0.08);
+    }
+
+    /* filtered noise burst - gives transients some air (buzzer click, defib hiss) */
+    function noise(o) {
+        const c = ac(); if (!c) return;
+        const t0 = c.currentTime + (o.delay || 0), dur = o.dur || 0.1;
+        const len = Math.max(1, Math.floor(c.sampleRate * dur));
+        const buf = c.createBuffer(1, len, c.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        const src = c.createBufferSource(); src.buffer = buf;
+
+        const f = c.createBiquadFilter();
+        f.type = o.filter || 'bandpass';
+        f.frequency.setValueAtTime(o.freq || 2000, t0);
+        f.Q.value = o.q || 1.2;
+        if (o.freqTo) f.frequency.exponentialRampToValueAtTime(o.freqTo, t0 + dur);
+
+        const g = c.createGain();
+        g.gain.setValueAtTime(o.gain === undefined ? 0.2 : o.gain, t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+        src.connect(f); f.connect(g); g.connect(master);
+        const sg = c.createGain(); sg.gain.value = 0.5; g.connect(sg); sg.connect(wet);
+        src.start(t0); src.stop(t0 + dur);
+    }
+
+    /* a note with a little harmonic stack so it reads as an instrument, not a beep */
+    function note(freq, delay, dur, gain, bright) {
+        voice({ freq: freq,       delay: delay, dur: dur,        gain: gain,        type: 'triangle', cutoff: bright || 4200 });
+        voice({ freq: freq * 2,   delay: delay, dur: dur * 0.7,  gain: gain * 0.30, type: 'sine',     cutoff: bright || 4200 });
+        voice({ freq: freq * 3,   delay: delay, dur: dur * 0.45, gain: gain * 0.12, type: 'sine' });
+        voice({ freq: freq,       delay: delay, dur: dur,        gain: gain * 0.35, type: 'sine', detune: 7 });
+    }
+
+    /* two-thump heartbeat with a body resonance instead of a bare sine */
+    function lubDub() {
+        voice({ freq: 88, sweepTo: 44, delay: 0,    dur: 0.16, gain: 0.55, type: 'sine', attack: 0.004, cutoff: 380, send: 0.3 });
+        noise({ freq: 140, delay: 0,    dur: 0.05, gain: 0.06, filter: 'lowpass' });
+        voice({ freq: 66, sweepTo: 36, delay: 0.17, dur: 0.20, gain: 0.36, type: 'sine', attack: 0.006, cutoff: 300, send: 0.3 });
+    }
+
+    return {
+        unlock() { ac(); },
+
+        /* clue opens - soft mallet ping */
+        beep() {
+            note(1174.7, 0, 0.30, 0.22, 6000);
+            noise({ freq: 5200, dur: 0.03, gain: 0.05 });
+        },
+
+        /* someone buzzed - urgent two-tone with a click transient on the front */
+        buzzIn() {
+            noise({ freq: 3000, dur: 0.035, gain: 0.16 });
+            voice({ freq: 784,  delay: 0,    dur: 0.11, gain: 0.26, type: 'square', cutoff: 2600 });
+            voice({ freq: 1174, delay: 0.10, dur: 0.22, gain: 0.26, type: 'square', cutoff: 3200 });
+            voice({ freq: 587,  delay: 0.10, dur: 0.22, gain: 0.12, type: 'triangle', cutoff: 2200 });
+        },
+
+        /* correct - rising major arpeggio landing on a held chord */
+        correct() {
+            note(523.25, 0,    0.16, 0.24);
+            note(659.25, 0.10, 0.16, 0.24);
+            note(783.99, 0.20, 0.50, 0.26, 6000);
+            note(1046.5, 0.20, 0.50, 0.14, 6000);
+            noise({ freq: 6000, delay: 0.20, dur: 0.05, gain: 0.04 });
+        },
+
+        /* wrong - descending minor drop, then the monitor flatline underneath */
+        flatline() {
+            note(392.00, 0,    0.14, 0.22);
+            note(311.13, 0.12, 0.34, 0.22);
+            voice({ freq: 880, delay: 0.30, dur: 1.10, gain: 0.10, type: 'sine', cutoff: 2400, attack: 0.02, release: 0.5 });
+            voice({ freq: 440, delay: 0.30, dur: 1.10, gain: 0.05, type: 'sine', cutoff: 1800, attack: 0.02, release: 0.5 });
+        },
+
+        /* daily double - charge-up whine, then the thump */
+        defib() {
+            voice({ freq: 160, sweepTo: 2100, delay: 0, dur: 1.00, gain: 0.13, type: 'sawtooth', cutoff: 900, cutoffTo: 7000, attack: 0.3 });
+            noise({ freq: 800, freqTo: 6000, delay: 0.2, dur: 0.8, gain: 0.04 });
+            voice({ freq: 120, sweepTo: 34, delay: 1.02, dur: 0.55, gain: 0.6, type: 'sine', attack: 0.003, cutoff: 400, send: 0.4 });
+            noise({ freq: 2500, delay: 1.02, dur: 0.12, gain: 0.14, filter: 'highpass' });
+        },
+
+        lubDub,
+        heartbeat(bpm) { this.stopHeartbeat(); lubDub(); hbTimer = setInterval(lubDub, 60000 / (bpm || 66)); },
+        stopHeartbeat() { if (hbTimer) { clearInterval(hbTimer); hbTimer = null; } }
+    };
+})();
+document.addEventListener('click', function () { HCAudio.unlock(); }, { once: true });
+
+/* ============================================================
+   FIREBASE + STATE
+   ============================================================ */
+const config = { apiKey: "AIzaSyBYYe4I-spWUJ6ORpbue_XKT8pqowmQNqo", authDomain: "trivia-game-3fe59.firebaseapp.com", databaseURL: "https://trivia-game-3fe59-default-rtdb.firebaseio.com", projectId: "trivia-game-3fe59", appId: "1:851139559118:web:df59f13dfd9234c1e89a9f" };
+firebase.initializeApp(config);
+const db = firebase.database();
+
+let rRef = null, iRef = null, roomName = null;
+let teamMax = 3, monitorOn = false;
+let currentQValue = 200, currentBuzz = null;
+let ddCell = null, ddTeam = null, ddWager = 0, isDailyDouble = false;
+let lockedSet = new Set();          // teams that already answered this clue wrong
+let answerShown = false;
+let heartbeatTimer = null;
+let boardData = null;
+
+function log(m) { document.getElementById('debug-txt').innerText = "LOG: " + m; }
+
+/* Anything that comes from the database (students can write to it) is treated as
+   untrusted. A team number must be a whole number from 1 to teamMax, otherwise 0. */
+function validTeam(t) {
+    const n = parseInt(t, 10);
+    return (n >= 1 && n <= teamMax) ? n : 0;
+}
+
+/* Remove every listener this page attached, so activating a room (or loading a
+   second lesson) never stacks duplicate handlers or duplicate sounds. */
+function detachRoomListeners() {
+    db.ref('library').off();
+    if (!rRef) return;
+    rRef.child('currentBuzz').off();
+    rRef.child('players').off();
+    rRef.child('final/wagers').off();
+    rRef.child('final/answers').off();
+    for (let i = 1; i <= 6; i++) rRef.child('scores/team' + i).off();
+}
+
+/* ---------- room lifecycle: heartbeat instead of onDisconnect-delete ---------- */
+function activateRoom() {
+    HCAudio.unlock();
+    const name = document.getElementById('r-name').value.trim();
+    if (!name) return alert("Enter a room name.");
+    if (/[.#$\[\]\/]/.test(name)) return alert("Room names can't contain  .  #  $  [  ]  or  /");
+    teamMax = parseInt(document.getElementById('t-count').value, 10);
+
+    detachRoomListeners();
+    if (iRef && roomName && roomName !== name) iRef.update({ status: 'ended', lastSeen: Date.now() });
+    roomName = name;
+
+    rRef = db.ref('rooms/' + roomName);
+    iRef = db.ref('roomIndex/' + roomName);
+
+    rRef.child('buzzerState').set('closed');
+    rRef.child('currentBuzz').set(null);
+    rRef.child('lockedTeams').set(null);
+    rRef.child('phase').set('board');
+    rRef.child('final').set(null);
+    rRef.child('metadata').set({ status: 'active', time: Date.now(), lastSeen: Date.now(), teams: teamMax });
+    iRef.set({ status: 'active', lastSeen: Date.now() });
+
+    /* The room is NOT deleted when this laptop blips. It stays listed, and a
+       heartbeat keeps it fresh; students filter out rooms unseen for 6 hours. */
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(function () {
+        if (!iRef) return;
+        const now = Date.now();
+        iRef.update({ status: 'active', lastSeen: now });
+        rRef.child('metadata/lastSeen').set(now);
+    }, 30000);
+
+    log("Room Active: " + roomName);
+    document.getElementById('step2-ui').style.display = 'block';
+
+    db.ref('library').on('value', function (s) {
+        const d = document.getElementById('lib-drop');
+        const oldVal = d.value;
+        d.innerHTML = '<option value="">-- Select Lesson --</option>' +
+                      '<option value="_CREATE_" style="color:#00d2ff; font-weight:bold;">&#10133; CREATE NEW BOARD</option>';
+        if (s.exists()) s.forEach(function (c) { const o = document.createElement('option'); o.value = c.key; o.innerText = c.key; d.appendChild(o); });
+        if (oldVal && oldVal !== "_CREATE_") d.value = oldVal;
+    });
+
+    setupBuzzerListener();
+    watchRoster();
+}
+
+/* re-assert the room after any network blip (this laptop losing Wi-Fi no longer
+   makes the room vanish from every student's phone) */
+db.ref('.info/connected').on('value', function (s) {
+    const online = s.val() === true;
+    document.getElementById('conn-dot').className = 'conn-dot' + (online ? ' ok' : '');
+    if (online && iRef && rRef) {
+        const now = Date.now();
+        iRef.update({ status: 'active', lastSeen: now });
+        rRef.child('metadata').update({ status: 'active', lastSeen: now });
+    }
+});
+
+function endRoom() {
+    if (!rRef) return;
+    if (!confirm("End this room? Students will no longer see it in the list.")) return;
+    iRef.update({ status: 'ended', lastSeen: Date.now() });
+    rRef.child('metadata/status').set('ended');
+    rRef.child('buzzerState').set('closed');
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    log("Room ended.");
+}
+
+function newClass() {
+    if (!rRef) return;
+    if (!confirm("⚠ Start NEW CLASS?\n\nThis will KICK ALL PLAYERS and RESET SCORES.")) return;
+    rRef.child('players').set(null);
+    rRef.child('scores').set(null);
+    rRef.child('currentBuzz').set(null);
+    rRef.child('lockedTeams').set(null);
+    alert("Room Cleared!");
+}
+
+function resetScores() {
+    if (!rRef) return;
+    if (!confirm("Reset SCORES only?")) return;
+    for (let i = 1; i <= teamMax; i++) rRef.child('scores/team' + i).set(0);
+}
+
+/* ---------- QR ---------- */
+function generateQR(link) {
+    document.getElementById('web-qr-img').src =
+        "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=" + encodeURIComponent(link);
+    document.getElementById('open-link-btn').href = link;
+}
+function manualUpdateQR() { const t = document.getElementById('student-link-box').value; if (t) generateQR(t); }
+window.addEventListener('load', function () {
+    let path = window.location.href.split('?')[0].split('#')[0];
+    if (path.endsWith("index.html")) path = path.replace("index.html", "play.html");
+    else if (path.endsWith("/")) path = path + "play.html";
+    else path = path.substring(0, path.lastIndexOf('/')) + "/play.html";
+    document.getElementById('student-link-box').value = path;
+    generateQR(path);
+});
+
+function checkBuilder(sel) { if (sel.value === "_CREATE_") { window.open('builder.html', '_blank'); sel.value = ""; } }
+
+/* ============================================================
+   BOARD
+   ============================================================ */
+function loadBoard() {
+    const name = document.getElementById('lib-drop').value;
+    if (!name || name === "_CREATE_") return alert("Select a valid lesson!");
+
+    db.ref('library/' + name).once('value', function (s) {
+        const data = s.val();
+        if (!data || !data.categories || !data.categories.length) return alert("That lesson looks empty.");
+        boardData = data;
+
+        document.getElementById('welcome').style.display = 'none';
+        document.getElementById('step3-ui').style.display = 'block';
+        setupScoreboard();
+
+        // one Daily Double, hidden in rows 2-5 (never the cheapest row), like the show
+        const cats = data.categories.length;
+        ddCell = { c: Math.floor(Math.random() * cats), r: 1 + Math.floor(Math.random() * 4) };
+        log("Board loaded. Daily Double is hidden.");
+
+        const grid = document.getElementById('board-grid');
+        grid.innerHTML = "";
+        grid.style.gridTemplateColumns = 'repeat(' + cats + ', 1fr)';   // follow the lesson, not a fixed 6
+        data.categories.forEach(function (cat) {
+            const h = document.createElement('div');
+            h.innerText = cat.name; h.style.color = "#00d2ff"; h.style.fontWeight = "bold";
+            grid.appendChild(h);
+        });
+        for (let r = 0; r < 5; r++) {
+            data.categories.forEach(function (cat, cIdx) {
+                const item = (cat.items && cat.items[r]) || { q: "(no question entered)", a: "(no answer entered)" };
+                const points = 200 * (r + 1);
+                const c = document.createElement('div');
+                c.className = "cell";
+                c.innerText = "$" + points;
+                c.onclick = function () {
+                    if (c.classList.contains('used')) return;
+                    c.classList.add('used');
+                    openClue(item, points, cIdx, r);
+                };
+                grid.appendChild(c);
+            });
+        }
+    });
+}
+
+function openClue(item, points, cIdx, r) {
+    currentQValue = points;
+    isDailyDouble = !!(ddCell && ddCell.c === cIdx && ddCell.r === r);
+    lockedSet.clear();
+    answerShown = false;
+
+    document.getElementById('theater').style.display = 'flex';
+    document.getElementById('t-final').style.display = 'none';
+
+    rRef.child('currentBuzz').set(null);
+    rRef.child('lockedTeams').set(null);
+
+    if (isDailyDouble) {
+        // no buzzer race on a Daily Double - it belongs to the team that found it
+        rRef.child('buzzerState').set('closed');
+        document.getElementById('t-normal').style.display = 'none';
+        document.getElementById('t-dd').style.display = 'block';
+        document.getElementById('dd-step1').style.display = 'block';
+        document.getElementById('dd-step2').style.display = 'none';
+        window.__ddItem = item;
+        HCAudio.stopHeartbeat();
+        HCAudio.defib();
+        renderDDTeamPicker();
+        return;
+    }
+
+    document.getElementById('t-dd').style.display = 'none';
+    document.getElementById('t-normal').style.display = 'block';
+    document.getElementById('q-box').innerText = item.q;
+    document.getElementById('a-box').innerText = item.a;
+    document.getElementById('a-box').style.display = 'none';
+    document.getElementById('rev-btn').style.display = 'block';
+    document.getElementById('score-ctrls').style.display = 'none';
+    document.getElementById('buzzer-notif').style.display = 'none';
+
+    rRef.child('buzzerState').set('open');
+    HCAudio.beep();
+    if (monitorOn) HCAudio.heartbeat(72);
+}
+
+/* ---------- Daily Double ---------- */
+function renderDDTeamPicker() {
+    const area = document.getElementById('dd-teams');
+    area.innerHTML = "";
+    for (let i = 1; i <= teamMax; i++) {
+        const b = document.createElement('button');
+        b.className = "btn-blue team-pick";
+        b.innerText = "TEAM " + i;
+        b.onclick = function () { ddPickTeam(i); };
+        area.appendChild(b);
+    }
+}
+function ddPickTeam(t) {
+    ddTeam = t;
+    rRef.child('scores/team' + t).once('value').then(function (s) {
+        const score = s.val() || 0;
+        const cap = Math.max(score, 1000);
+        document.getElementById('dd-team-lbl').innerText = t;
+        document.getElementById('dd-team-score').innerText = score;
+        document.getElementById('dd-cap').innerText = cap;
+        const w = document.getElementById('dd-wager');
+        w.max = cap; w.value = "";
+        document.getElementById('dd-step1').style.display = 'none';
+        document.getElementById('dd-step2').style.display = 'block';
+        w.focus();
+    });
+}
+function ddConfirmWager() {
+    const el = document.getElementById('dd-wager');
+    const cap = parseInt(el.max, 10);
+    let v = parseInt(el.value, 10);
+    if (isNaN(v) || v < 0) v = 0;
+    if (v > cap) v = cap;
+    ddWager = v;
+    currentQValue = v;
+
+    document.getElementById('t-dd').style.display = 'none';
+    document.getElementById('t-normal').style.display = 'block';
+    document.getElementById('q-box').innerText = window.__ddItem.q;
+    document.getElementById('a-box').innerText = window.__ddItem.a;
+    document.getElementById('a-box').style.display = 'none';
+    document.getElementById('rev-btn').style.display = 'block';
+    document.getElementById('buzzer-notif').style.display = 'block';
+    document.getElementById('th-user').innerText = "DAILY DOUBLE";
+    document.getElementById('th-team').innerText = "TEAM " + ddTeam + " wagered $" + v;
+
+    // the wagering team owns this clue outright, so judge as soon as it's up
+    currentBuzz = { user: "Daily Double", team: ddTeam };
+    document.getElementById('score-ctrls').style.display = 'block';
+    renderVerdict();
+    HCAudio.beep();
+    if (monitorOn) HCAudio.heartbeat(84);
+}
+
+/* ---------- verdict ----------
+   The judge buttons appear the MOMENT a team buzzes in - the host marks the
+   spoken answer right then. The written answer stays hidden until the clue is
+   actually over, otherwise marking a team wrong would reopen the buzzer with
+   the answer already up on the projector. */
+function renderVerdict() {
+    const verdict = document.getElementById('verdict-area');
+    const manual  = document.getElementById('team-btns');
+    verdict.innerHTML = "";
+    manual.innerHTML  = "";
+
+    const bTeam = currentBuzz ? validTeam(currentBuzz.team) : 0;   // never trust the raw value
+
+    if (bTeam) {
+        verdict.innerHTML =
+            '<p style="font-size:1.2em; color:#aaa;">' +
+                '<b style="color:#fff;">Team ' + bTeam + '</b> buzzed in &middot; worth $' + currentQValue +
+            '</p>' +
+            '<button class="btn-green score-btn" style="padding:16px 28px; font-size:1.2em;" onclick="verdictCorrect(' + bTeam + ')">&#10004; CORRECT  +$' + currentQValue + '</button>' +
+            '<button class="btn-red score-btn" style="padding:16px 28px; font-size:1.2em;" onclick="verdictWrong(' + bTeam + ')">&#10008; INCORRECT  -$' + currentQValue + '</button>';
+    } else if (answerShown) {
+        verdict.innerHTML = '<p style="color:#aaa;">Nobody buzzed. Award manually if you want:</p>';
+    } else {
+        verdict.innerHTML = '<p style="color:#aaa;">Waiting for a buzz&hellip;</p>';
+    }
+
+    if (lockedSet.size) {
+        verdict.innerHTML += '<p style="color:#e94560; font-size:0.85em; margin-top:8px;">Locked out: Team ' +
+            Array.from(lockedSet).sort().join(', Team ') + '</p>';
+    }
+
+    /* Manual override is hidden by default - with it always on screen it was far
+       too easy to award the wrong team. It never shows while a team is buzzed in;
+       in that state the only controls are CORRECT / INCORRECT for that team. */
+    if (bTeam) return;
+
+    let rows = "";
+    for (let i = 1; i <= teamMax; i++) {
+        rows +=
+            '<div style="text-align:center;">' +
+            '<div style="font-weight:bold; color:#aaa; margin-bottom:5px;">TEAM ' + i + '</div>' +
+            '<button onclick="addScore(' + i + ',' + currentQValue + ')" class="score-btn s-plus">+' + currentQValue + '</button>' +
+            '<button onclick="addScore(' + i + ',' + (-currentQValue) + ')" class="score-btn s-minus">-' + currentQValue + '</button>' +
+            '</div>';
+    }
+    manual.innerHTML =
+        '<div style="width:100%; text-align:center;">' +
+          '<button class="btn-grey" style="width:auto; padding:6px 14px; font-size:0.85em; opacity:0.75;" ' +
+                  'onclick="toggleManual()">&#9881; Manual score adjust</button>' +
+          '<div id="manual-rows" style="display:none; justify-content:center; gap:20px; margin-top:12px;">' + rows + '</div>' +
+        '</div>';
+}
+
+/* Shows the written answer to the room. Ends the clue - the buzzer closes. */
+function reveal() {
+    answerShown = true;
+    document.getElementById('a-box').style.display = 'block';
+    document.getElementById('rev-btn').style.display = 'none';
+    document.getElementById('score-ctrls').style.display = 'block';
+    if (rRef) rRef.child('buzzerState').set('closed');
+    HCAudio.stopHeartbeat();
+    renderVerdict();
+}
+
+function verdictCorrect(team) {
+    addScore(team, currentQValue);
+    HCAudio.correct();
+    if (rRef) { rRef.child('currentBuzz').set(null); rRef.child('buzzerState').set('closed'); }
+    currentBuzz = null;
+    HCAudio.stopHeartbeat();
+
+    // show the answer so the class sees the confirmation, then wait for BACK TO BOARD
+    answerShown = true;
+    document.getElementById('a-box').style.display = 'block';
+    document.getElementById('rev-btn').style.display = 'none';
+    document.getElementById('buzzer-notif').style.display = 'none';
+    document.getElementById('team-btns').innerHTML = "";
+    document.getElementById('verdict-area').innerHTML =
+        '<p style="font-size:1.4em; color:#28a745;">&#10004; Team ' + team + '  +$' + currentQValue + '</p>';
+}
+
+function verdictWrong(team) {
+    addScore(team, -currentQValue);
+    HCAudio.flatline();
+    if (isDailyDouble) {                       // a Daily Double belongs to one team alone
+        answerShown = true;
+        document.getElementById('a-box').style.display = 'block';
+        document.getElementById('rev-btn').style.display = 'none';
+        document.getElementById('buzzer-notif').style.display = 'none';
+        document.getElementById('team-btns').innerHTML = "";
+        document.getElementById('verdict-area').innerHTML =
+            '<p style="font-size:1.4em; color:#e94560;">&#10008; Team ' + team + '  -$' + currentQValue + '</p>';
+        if (rRef) { rRef.child('currentBuzz').set(null); rRef.child('buzzerState').set('closed'); }
+        currentBuzz = null;
+        return;
+    }
+
+    // lock that team out and reopen the buzzer for everyone else
+    lockedSet.add(team);
+    rRef.child('lockedTeams/team' + team).set(true);
+    rRef.child('currentBuzz').set(null);
+    currentBuzz = null;
+    document.getElementById('buzzer-notif').style.display = 'none';
+
+    if (lockedSet.size >= teamMax) {           // everyone has missed it - nobody left to buzz
+        log("All teams locked out.");
+        rRef.child('buzzerState').set('closed');
+        answerShown = true;
+        document.getElementById('a-box').style.display = 'block';
+        document.getElementById('rev-btn').style.display = 'none';
+        document.getElementById('team-btns').innerHTML = "";
+        document.getElementById('verdict-area').innerHTML =
+            '<p style="font-size:1.2em; color:#e94560;">No team got it.</p>';
+        HCAudio.stopHeartbeat();
+        return;
+    }
+
+    rRef.child('buzzerState').set('open');
+    renderVerdict();
+    log("Team " + team + " locked out; buzzer reopened.");
+    if (monitorOn) HCAudio.heartbeat(88);
+}
+
+function closeTheater() {
+    document.getElementById('theater').style.display = 'none';
+    document.getElementById('t-dd').style.display = 'none';
+    document.getElementById('t-normal').style.display = 'none';
+    if (rRef) {
+        rRef.child('currentBuzz').set(null);
+        rRef.child('buzzerState').set('closed');
+        rRef.child('lockedTeams').set(null);
+    }
+    currentBuzz = null; isDailyDouble = false; ddTeam = null;
+    lockedSet.clear(); answerShown = false;
+    HCAudio.stopHeartbeat();
+    if (monitorOn) HCAudio.heartbeat(56);
+}
+
+function toggleManual() {
+    const r = document.getElementById('manual-rows');
+    if (r) r.style.display = (r.style.display === 'none' ? 'flex' : 'none');
+}
+
+/* transaction, not a DOM read - two open boards can no longer clobber each other */
+function addScore(team, amount) {
+    rRef.child('scores/team' + team).transaction(function (v) { return (v || 0) + amount; });
+}
+
+function setupScoreboard() {
+    const sDiv = document.getElementById('score-display');
+    sDiv.innerHTML = "";
+    for (let i = 1; i <= 6; i++) rRef.child('scores/team' + i).off();   // no stacked listeners on a 2nd lesson
+    for (let i = 1; i <= teamMax; i++) {
+        sDiv.innerHTML += '<div style="background:#222; padding:10px; border:1px solid #ffd700; border-radius:5px;">T' + i +
+                          ': <span id="score-' + i + '" style="color:#ffd700;">0</span></div>';
+    }
+    for (let i = 1; i <= teamMax; i++) {
+        (function (n) {
+            rRef.child('scores/team' + n).on('value', function (sv) {
+                const el = document.getElementById('score-' + n);
+                if (el) el.innerText = sv.val() || 0;
+            });
+        })(i);
+    }
+}
+
+function setupBuzzerListener() {
+    rRef.child('currentBuzz').off();
+    rRef.child('currentBuzz').on('value', function (s) {
+        const v = s.val();
+        const notif = document.getElementById('buzzer-notif');
+        if (v && v.user) {
+            currentBuzz = v;
+            notif.style.display = 'block';
+            document.getElementById('th-user').innerText = v.user;
+            document.getElementById('th-team').innerText = "TEAM " + (validTeam(v.team) || "?");
+            HCAudio.stopHeartbeat();
+            HCAudio.buzzIn();
+            // judge immediately - no need to reveal the answer first
+            document.getElementById('score-ctrls').style.display = 'block';
+            renderVerdict();
+        } else {
+            if (!isDailyDouble) currentBuzz = null;
+            notif.style.display = 'none';
+        }
+    });
+}
+
+function watchRoster() {
+    rRef.child('players').off();
+    rRef.child('players').on('value', function (s) {
+        let total = 0, online = 0;
+        s.forEach(function (c) { total++; if (c.val() && c.val().online !== false) online++; });
+        document.getElementById('roster-line').innerText = total + " players (" + online + " online)";
+    });
+}
+
+function shuffleTeams() {
+    rRef.child('players').once('value', function (s) {
+        const players = s.val();
+        if (!players) return alert("No players!");
+        const pIds = Object.keys(players);
+        for (let i = pIds.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const tmp = pIds[i]; pIds[i] = pIds[j]; pIds[j] = tmp;
+        }
+        // one multi-path update instead of N separate writes
+        const updates = {};
+        pIds.forEach(function (id, index) { updates[id + '/team'] = (index % teamMax) + 1; });
+        rRef.child('players').update(updates);
+        HCAudio.beep();
+        alert("Teams Shuffled!");
+    });
+}
+
+function toggleMusic() {
+    monitorOn = !monitorOn;
+    const b = document.getElementById('music-btn');
+    if (monitorOn) { HCAudio.unlock(); HCAudio.heartbeat(56); b.innerText = "\u{1F493} MONITOR: ON"; }
+    else { HCAudio.stopHeartbeat(); b.innerText = "\u{1F3B5} MONITOR: OFF"; }
+}
+
+/* ============================================================
+   FINAL JEOPARDY
+   ============================================================ */
+function startFinal() {
+    if (!rRef) return alert("Activate a room first.");
+    document.getElementById('theater').style.display = 'flex';
+    document.getElementById('t-normal').style.display = 'none';
+    document.getElementById('t-dd').style.display = 'none';
+    document.getElementById('t-final').style.display = 'block';
+    showFJStep('fj-setup');
+    HCAudio.stopHeartbeat();
+}
+function showFJStep(id) {
+    ['fj-setup', 'fj-wagering', 'fj-clue', 'fj-scoring'].forEach(function (s) {
+        document.getElementById(s).style.display = (s === id) ? 'block' : 'none';
+    });
+}
+function fjCancel() {
+    rRef.child('final/wagers').off();
+    rRef.child('final/answers').off();
+    HCAudio.stopHeartbeat();
+    document.getElementById('theater').style.display = 'none';
+    rRef.child('phase').set('board');
+    rRef.child('final').set(null);
+}
+
+function fjOpenWagers() {
+    const q = document.getElementById('fj-q').value.trim();
+    const a = document.getElementById('fj-a').value.trim();
+    if (!q || !a) return alert("Enter both the Final Jeopardy question and its answer.");
+    /* The correct answer is NOT written to the database - students can read
+       everything there. It stays in the textarea on this screen only. */
+    rRef.child('final').set({ q: q, stage: 'wager' });
+    rRef.child('phase').set('final');
+    rRef.child('buzzerState').set('closed');
+    showFJStep('fj-wagering');
+    HCAudio.heartbeat(84);
+
+    rRef.child('final/wagers').off();
+    rRef.child('final/wagers').on('value', function (s) {
+        const v = s.val() || {};
+        let html = "";
+        for (let i = 1; i <= teamMax; i++) {
+            const w = v['team' + i];
+            html += '<div class="fj-row"><span class="nm">Team ' + i + '</span><span style="color:' +
+                    (w === undefined ? '#ff9900' : '#00ff88') + '">' +
+                    (w === undefined ? 'waiting...' : 'locked in') + '</span></div>';
+        }
+        document.getElementById('fj-wager-list').innerHTML = html;
+    });
+}
+
+function fjRevealClue() {
+    rRef.child('final/stage').set('answer');
+    rRef.child('final/wagers').off();
+    document.getElementById('fj-q-box').innerText = document.getElementById('fj-q').value.trim();
+    showFJStep('fj-clue');
+    HCAudio.defib();
+    HCAudio.heartbeat(96);
+
+    rRef.child('final/answers').off();
+    rRef.child('final/answers').on('value', function (s) {
+        const v = s.val() || {};
+        let html = "";
+        for (let i = 1; i <= teamMax; i++) {
+            const a = v['team' + i];
+            html += '<div class="fj-row"><span class="nm">Team ' + i + '</span><span style="color:' +
+                    (a === undefined ? '#ff9900' : '#00ff88') + '">' +
+                    (a === undefined ? 'typing...' : 'locked in') + '</span></div>';
+        }
+        document.getElementById('fj-answer-list').innerHTML = html;
+    });
+}
+
+function fjRevealAnswers() {
+    rRef.child('final/answers').off();
+    rRef.child('final/stage').set('reveal');
+    HCAudio.stopHeartbeat();
+    document.getElementById('fj-a-box').innerText = "Correct answer: " + document.getElementById('fj-a').value.trim();
+    showFJStep('fj-scoring');
+
+    Promise.all([rRef.child('final').once('value'), rRef.child('scores').once('value')]).then(function (res) {
+        const f = res[0].val() || {};
+        const scores  = res[1].val() || {};
+        const wagers  = f.wagers  || {};
+        const answers = f.answers || {};
+        let html = "";
+        for (let i = 1; i <= teamMax; i++) {
+            /* Re-check every wager here against the team's real score, using the same
+               limit the student screen shows (the greater of their score or $1000),
+               so an edited phone can't wager more than allowed. */
+            const score = parseInt(scores['team' + i], 10) || 0;
+            const cap = Math.max(score, 1000);
+            let w = parseInt(wagers['team' + i], 10);
+            if (isNaN(w) || w < 0) w = 0;
+            const capped = w > cap;
+            if (capped) w = cap;
+            const a = answers['team' + i] || '(no answer)';
+            html += '<div class="fj-row">' +
+                    '<span class="nm"><b>Team ' + i + '</b> wagered $' + w +
+                    (capped ? ' <small style="color:#ff9900;">(capped)</small>' : '') + '<br>' +
+                    '<span style="color:#ffd700; font-size:1.15em;">' + escapeHtml(a) + '</span></span>' +
+                    '<button class="btn-green score-btn" onclick="fjScore(' + i + ',' + w + ',1,this)">&#10004;</button>' +
+                    '<button class="btn-red score-btn" onclick="fjScore(' + i + ',' + w + ',-1,this)">&#10008;</button>' +
+                    '</div>';
+        }
+        document.getElementById('fj-score-list').innerHTML = html;
+    });
+}
+
+function fjScore(team, wager, sign, btn) {
+    addScore(team, sign * wager);
+    if (sign > 0) HCAudio.correct(); else HCAudio.flatline();
+    const row = btn.parentNode;
+    row.querySelectorAll('button').forEach(function (b) { b.disabled = true; b.style.opacity = 0.35; });
+    row.style.borderLeft = "5px solid " + (sign > 0 ? "#28a745" : "#e94560");
+}
+
+function fjFinish() {
+    rRef.child('final/stage').set('done');
+    document.getElementById('theater').style.display = 'none';
+    HCAudio.stopHeartbeat();
+    HCAudio.correct();
+    log("Final Jeopardy complete.");
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
