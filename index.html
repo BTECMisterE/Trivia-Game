@@ -7,7 +7,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         * { box-sizing: border-box; }
-        body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; overflow: hidden; }
+        body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; margin: 0; height: 100vh; height: 100dvh; overflow: hidden; }
         .sidebar { width: 330px; background: #111; border-right: 2px solid #00d2ff; padding: 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
         .main { flex-grow: 1; padding: 20px; overflow-y: auto; text-align: center; }
         .box { background: #222; padding: 14px; border-radius: 8px; border: 1px solid #444; margin-bottom: 8px; }
@@ -130,7 +130,7 @@
 
         <div id="fj-setup">
             <textarea id="fj-q" class="wide" placeholder="Final Jeopardy question..." style="height:90px; font-size:1.1em;"></textarea>
-            <textarea id="fj-a" class="wide" placeholder="Correct answer..." style="height:60px; font-size:1.1em;"></textarea>
+            <textarea id="fj-a" class="wide" placeholder="Correct answer (stays on this screen only)..." style="height:60px; font-size:1.1em;"></textarea>
             <button class="btn-gold" style="width:300px;" onclick="fjOpenWagers()">OPEN WAGERING</button>
             <button class="btn-grey" style="width:300px;" onclick="fjCancel()">CANCEL</button>
         </div>
@@ -164,7 +164,7 @@
    so the cues sit in a room instead of sounding like a calculator.
    ============================================================ */
 const HCAudio = (function () {
-    let ctx = null, master = null, wet = null, hbTimer = null, hbGain = null;
+    let ctx = null, master = null, wet = null, hbTimer = null;
 
     function buildReverb(c, seconds, decay) {
         const len = Math.floor(c.sampleRate * seconds);
@@ -335,12 +335,36 @@ let boardData = null;
 
 function log(m) { document.getElementById('debug-txt').innerText = "LOG: " + m; }
 
+/* Anything that comes from the database (students can write to it) is treated as
+   untrusted. A team number must be a whole number from 1 to teamMax, otherwise 0. */
+function validTeam(t) {
+    const n = parseInt(t, 10);
+    return (n >= 1 && n <= teamMax) ? n : 0;
+}
+
+/* Remove every listener this page attached, so activating a room (or loading a
+   second lesson) never stacks duplicate handlers or duplicate sounds. */
+function detachRoomListeners() {
+    db.ref('library').off();
+    if (!rRef) return;
+    rRef.child('currentBuzz').off();
+    rRef.child('players').off();
+    rRef.child('final/wagers').off();
+    rRef.child('final/answers').off();
+    for (let i = 1; i <= 6; i++) rRef.child('scores/team' + i).off();
+}
+
 /* ---------- room lifecycle: heartbeat instead of onDisconnect-delete ---------- */
 function activateRoom() {
     HCAudio.unlock();
-    roomName = document.getElementById('r-name').value.trim();
-    if (!roomName) return alert("Enter a room name.");
+    const name = document.getElementById('r-name').value.trim();
+    if (!name) return alert("Enter a room name.");
+    if (/[.#$\[\]\/]/.test(name)) return alert("Room names can't contain  .  #  $  [  ]  or  /");
     teamMax = parseInt(document.getElementById('t-count').value, 10);
+
+    detachRoomListeners();
+    if (iRef && roomName && roomName !== name) iRef.update({ status: 'ended', lastSeen: Date.now() });
+    roomName = name;
 
     rRef = db.ref('rooms/' + roomName);
     iRef = db.ref('roomIndex/' + roomName);
@@ -444,7 +468,7 @@ function loadBoard() {
 
     db.ref('library/' + name).once('value', function (s) {
         const data = s.val();
-        if (!data || !data.categories) return alert("That lesson looks empty.");
+        if (!data || !data.categories || !data.categories.length) return alert("That lesson looks empty.");
         boardData = data;
 
         document.getElementById('welcome').style.display = 'none';
@@ -458,6 +482,7 @@ function loadBoard() {
 
         const grid = document.getElementById('board-grid');
         grid.innerHTML = "";
+        grid.style.gridTemplateColumns = 'repeat(' + cats + ', 1fr)';   // follow the lesson, not a fixed 6
         data.categories.forEach(function (cat) {
             const h = document.createElement('div');
             h.innerText = cat.name; h.style.color = "#00d2ff"; h.style.fontWeight = "bold";
@@ -465,7 +490,7 @@ function loadBoard() {
         });
         for (let r = 0; r < 5; r++) {
             data.categories.forEach(function (cat, cIdx) {
-                const item = cat.items[r];
+                const item = (cat.items && cat.items[r]) || { q: "(no question entered)", a: "(no answer entered)" };
                 const points = 200 * (r + 1);
                 const c = document.createElement('div');
                 c.className = "cell";
@@ -586,7 +611,7 @@ function renderVerdict() {
     verdict.innerHTML = "";
     manual.innerHTML  = "";
 
-    const bTeam = currentBuzz && currentBuzz.team;
+    const bTeam = currentBuzz ? validTeam(currentBuzz.team) : 0;   // never trust the raw value
 
     if (bTeam) {
         verdict.innerHTML =
@@ -713,12 +738,12 @@ function closeTheater() {
     if (monitorOn) HCAudio.heartbeat(56);
 }
 
-/* transaction, not a DOM read - two open boards can no longer clobber each other */
 function toggleManual() {
     const r = document.getElementById('manual-rows');
     if (r) r.style.display = (r.style.display === 'none' ? 'flex' : 'none');
 }
 
+/* transaction, not a DOM read - two open boards can no longer clobber each other */
 function addScore(team, amount) {
     rRef.child('scores/team' + team).transaction(function (v) { return (v || 0) + amount; });
 }
@@ -726,6 +751,7 @@ function addScore(team, amount) {
 function setupScoreboard() {
     const sDiv = document.getElementById('score-display');
     sDiv.innerHTML = "";
+    for (let i = 1; i <= 6; i++) rRef.child('scores/team' + i).off();   // no stacked listeners on a 2nd lesson
     for (let i = 1; i <= teamMax; i++) {
         sDiv.innerHTML += '<div style="background:#222; padding:10px; border:1px solid #ffd700; border-radius:5px;">T' + i +
                           ': <span id="score-' + i + '" style="color:#ffd700;">0</span></div>';
@@ -741,6 +767,7 @@ function setupScoreboard() {
 }
 
 function setupBuzzerListener() {
+    rRef.child('currentBuzz').off();
     rRef.child('currentBuzz').on('value', function (s) {
         const v = s.val();
         const notif = document.getElementById('buzzer-notif');
@@ -748,7 +775,7 @@ function setupBuzzerListener() {
             currentBuzz = v;
             notif.style.display = 'block';
             document.getElementById('th-user').innerText = v.user;
-            document.getElementById('th-team').innerText = "TEAM " + (v.team || "?");
+            document.getElementById('th-team').innerText = "TEAM " + (validTeam(v.team) || "?");
             HCAudio.stopHeartbeat();
             HCAudio.buzzIn();
             // judge immediately - no need to reveal the answer first
@@ -762,6 +789,7 @@ function setupBuzzerListener() {
 }
 
 function watchRoster() {
+    rRef.child('players').off();
     rRef.child('players').on('value', function (s) {
         let total = 0, online = 0;
         s.forEach(function (c) { total++; if (c.val() && c.val().online !== false) online++; });
@@ -812,6 +840,9 @@ function showFJStep(id) {
     });
 }
 function fjCancel() {
+    rRef.child('final/wagers').off();
+    rRef.child('final/answers').off();
+    HCAudio.stopHeartbeat();
     document.getElementById('theater').style.display = 'none';
     rRef.child('phase').set('board');
     rRef.child('final').set(null);
@@ -821,12 +852,15 @@ function fjOpenWagers() {
     const q = document.getElementById('fj-q').value.trim();
     const a = document.getElementById('fj-a').value.trim();
     if (!q || !a) return alert("Enter both the Final Jeopardy question and its answer.");
-    rRef.child('final').set({ q: q, a: a, stage: 'wager' });
+    /* The correct answer is NOT written to the database - students can read
+       everything there. It stays in the textarea on this screen only. */
+    rRef.child('final').set({ q: q, stage: 'wager' });
     rRef.child('phase').set('final');
     rRef.child('buzzerState').set('closed');
     showFJStep('fj-wagering');
     HCAudio.heartbeat(84);
 
+    rRef.child('final/wagers').off();
     rRef.child('final/wagers').on('value', function (s) {
         const v = s.val() || {};
         let html = "";
@@ -848,6 +882,7 @@ function fjRevealClue() {
     HCAudio.defib();
     HCAudio.heartbeat(96);
 
+    rRef.child('final/answers').off();
     rRef.child('final/answers').on('value', function (s) {
         const v = s.val() || {};
         let html = "";
@@ -868,16 +903,26 @@ function fjRevealAnswers() {
     document.getElementById('fj-a-box').innerText = "Correct answer: " + document.getElementById('fj-a').value.trim();
     showFJStep('fj-scoring');
 
-    rRef.child('final').once('value').then(function (s) {
-        const f = s.val() || {};
+    Promise.all([rRef.child('final').once('value'), rRef.child('scores').once('value')]).then(function (res) {
+        const f = res[0].val() || {};
+        const scores  = res[1].val() || {};
         const wagers  = f.wagers  || {};
         const answers = f.answers || {};
         let html = "";
         for (let i = 1; i <= teamMax; i++) {
-            const w = wagers['team' + i] || 0;
+            /* Re-check every wager here against the team's real score, using the same
+               limit the student screen shows (the greater of their score or $1000),
+               so an edited phone can't wager more than allowed. */
+            const score = parseInt(scores['team' + i], 10) || 0;
+            const cap = Math.max(score, 1000);
+            let w = parseInt(wagers['team' + i], 10);
+            if (isNaN(w) || w < 0) w = 0;
+            const capped = w > cap;
+            if (capped) w = cap;
             const a = answers['team' + i] || '(no answer)';
             html += '<div class="fj-row">' +
-                    '<span class="nm"><b>Team ' + i + '</b> wagered $' + w + '<br>' +
+                    '<span class="nm"><b>Team ' + i + '</b> wagered $' + w +
+                    (capped ? ' <small style="color:#ff9900;">(capped)</small>' : '') + '<br>' +
                     '<span style="color:#ffd700; font-size:1.15em;">' + escapeHtml(a) + '</span></span>' +
                     '<button class="btn-green score-btn" onclick="fjScore(' + i + ',' + w + ',1,this)">&#10004;</button>' +
                     '<button class="btn-red score-btn" onclick="fjScore(' + i + ',' + w + ',-1,this)">&#10008;</button>' +
